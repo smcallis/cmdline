@@ -1,0 +1,63 @@
+BasedOnStyle: Google
+AccessModifierOffset: -3
+
+# Overall project options.
+Standard: Latest
+ColumnLimit: 80
+IndentWidth: 4
+UseTab:   Never
+
+InsertNewlineAtEOF: true
+
+# Alignment tweaks.
+AlignConsecutiveAssignments: Consecutive
+
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
+
+AlignEscapedNewlines: Left
+AlignArrayOfStructures: Left
+
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignCaseColons: false
+
+# Configure when we can have single line things.
+AllowShortBlocksOnASingleLine:       Empty
+AllowShortCaseLabelsOnASingleLine:   true
+AllowShortFunctionsOnASingleLine:    Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine:        false
+
+# We can put all our arguments on the next line.
+AlignAfterOpenBracket:                     AlwaysBreak
+AllowAllArgumentsOnNextLine:               true
+AllowAllConstructorInitializersOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# Pointers and references go on the type.
+DerivePointerAlignment: false
+PointerAlignment:       Left
+
+# Sort #includes into groups alphabetically.
+# NOTE: Each regex below is matched in order, so beware of regex ordering if
+# multiple regexes might match. The first one matched will define the priority.
+IncludeBlocks: Regroup
+IncludeCategories:
+    # Other quoted includes go last.
+    - Regex: '^"[[:alnum:]_\./]+"'
+      Priority: 3
+
+    # C++ standard library includes go at the top
+    - Regex: '^<[[:alnum:]_]+>'
+      Priority: 1
+
+    # Includes with a . in them go after C++ includes
+    - Regex: '^<[[:alnum:]_\./]+>'
+      Priority: 2
+
+KeepEmptyLinesAtTheStartOfBlocks: true
+MaxEmptyLinesToKeep: 1
