@@ -63,6 +63,7 @@ struct ParseError {
         kTooManyLines,
         kTooManyOptions,
         kUnknownOptionTag,
+        kOptionalArgNotLast,
         kUnsupportedAlias,
         kVariadicArgNotLast,
     };
@@ -113,6 +114,7 @@ struct ParseError {
           case kTooManyLines:            return "too many lines";
           case kTooManyOptions:          return "too many options";
           case kUnknownOptionTag:        return "unknown option tag";
+          case kOptionalArgNotLast:      return "optional argument must be last";
           case kUnsupportedAlias:        return "option aliases are not supported";
           case kVariadicArgNotLast:      return "variadic argument must be last";
           case kUnknown:

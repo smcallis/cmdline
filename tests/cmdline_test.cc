@@ -1158,6 +1158,47 @@ TEST(CmdlineTest, StarPositionalAcceptsZeroOrMoreValues) {
     EXPECT_NE(plain.find("<files>*"), std::string::npos);
 }
 
+TEST(CmdlineTest, QuestionPositionalAcceptsZeroOrOneValue) {
+    const char* empty_argv[] = {"tool"};
+
+    auto empty = try_parse_cmdline<R"(
+        _Arguments
+          <config>?  Optional config.
+    )">(1, empty_argv);
+
+    ASSERT_TRUE(empty) << cmdline_error_message(empty.error());
+    const std::optional<std::string>& missing = empty->arg<"config">();
+    EXPECT_FALSE(missing);
+
+    const char* value_argv[] = {"tool", "config.toml"};
+
+    auto value = try_parse_cmdline<R"(
+        _Arguments
+          <config>?  Optional config.
+    )">(2, value_argv);
+
+    ASSERT_TRUE(value) << cmdline_error_message(value.error());
+    const std::optional<std::string>& config = value->arg<"config">();
+    ASSERT_TRUE(config);
+    EXPECT_EQ(*config, "config.toml");
+
+    const char* overflow_argv[] = {"tool", "one", "two"};
+
+    auto overflow = try_parse_cmdline<R"(
+        _Arguments
+          <config>?  Optional config.
+    )">(3, overflow_argv);
+
+    ASSERT_FALSE(overflow);
+    EXPECT_EQ(overflow.error().code, ErrorCode::kOverflow);
+
+    std::string plain = strip_ansi(rendered_usage<R"(
+        _Arguments
+          <config>?  Optional config.
+    )">("tool"));
+    EXPECT_NE(plain.find("<config>?"), std::string::npos);
+}
+
 TEST(CmdlineTest, ToggleableSwitchesUseLastInstance) {
     const char* argv[] = {"sync",         "--token", "secret", "--feature",
                           "--no-feature", "src",     "dst",    "inc"};

@@ -35,6 +35,9 @@ struct ArgSpec {
     TextRange description{};  // Description text.
     bool variadic{};          // Accepts trailing repeated values.
     bool required{true};      // Must receive at least one command-line value.
+
+    // Returns whether this argument accepts zero or one value.
+    constexpr bool optional() const { return !variadic && !required; }
 };
 
 // Describes one switch or value-taking option parsed from the spec.
@@ -377,9 +380,11 @@ constexpr ParseResult<ArgSpec> parse_arg_line(
     } else if (cursor.accept('*')) {
         variadic = true;
         required = false;
+    } else if (cursor.accept('?')) {
+        required = false;
     }
 
-    if (is_oneof(cursor.peek(), "+*")) {
+    if (is_oneof(cursor.peek(), "+*?")) {
         return std::unexpected(
             cursor.error(ParseError::kDuplicateRepeatMarker));
     }
