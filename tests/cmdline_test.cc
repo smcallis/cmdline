@@ -1676,7 +1676,9 @@ TEST(CmdlineTest, RuntimeFacesStyleWithoutChangingParsedType) {
     std::string help =
         strip_ansi(rendered_usage<kOverrideSpec, Types>("tool", faces));
     EXPECT_NE(help.find("<widget>"), std::string::npos);
-    EXPECT_EQ(find_face(spec.faces(), "widget"), fmt::fg(fmt::rgb(1, 2, 3)));
+    EXPECT_EQ(
+        styled(find_face(spec.faces(), "widget"), "x", true),
+        styled(fmt::fg(fmt::rgb(1, 2, 3)), "x", true));
 
     auto parsed = try_parse_cmdline<kOverrideSpec, Types>(4, argv, faces);
 
@@ -1693,7 +1695,9 @@ TEST(CmdlineTest, RuntimeFacesOverrideBuiltInFaces) {
 
     auto spec = runtime_cmdline<kOverrideSpec>(faces);
 
-    EXPECT_EQ(find_face(spec.faces(), "input"), fmt::fg(fmt::rgb(4, 5, 6)));
+    EXPECT_EQ(
+        styled(find_face(spec.faces(), "input"), "x", true),
+        styled(fmt::fg(fmt::rgb(4, 5, 6)), "x", true));
 }
 
 TEST(CmdlineTest, RuntimeFacesOverrideSyntaxFaces) {
@@ -1704,7 +1708,8 @@ TEST(CmdlineTest, RuntimeFacesOverrideSyntaxFaces) {
     auto spec = runtime_cmdline<kOverrideSpec>(faces);
 
     EXPECT_EQ(
-        find_face(spec.faces(), "cmdline-usage"), fmt::fg(fmt::rgb(7, 8, 9)));
+        styled(find_face(spec.faces(), "cmdline-usage"), "x", true),
+        styled(fmt::fg(fmt::rgb(7, 8, 9)), "x", true));
 }
 
 }  // namespace
