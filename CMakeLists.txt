@@ -65,7 +65,7 @@ target_link_libraries(example PRIVATE cmdline)
 
 include(CTest)
 if(BUILD_TESTING)
-    find_package(GTest REQUIRED)
+    find_package(GTest REQUIRED CONFIG)
     include(GoogleTest)
 
     add_executable(
