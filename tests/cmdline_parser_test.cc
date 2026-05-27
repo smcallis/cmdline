@@ -178,6 +178,31 @@ TEST(CmdlineCheckTest, AllowsStarVariadicArgumentOnlyAtEnd) {
     EXPECT_EQ(bad.error().error_message(), "variadic argument must be last");
 }
 
+TEST(CmdlineParserTest, ParsesOptionalPositionalArgument) {
+    constexpr auto spec = parse_spec<R"(
+        _Arguments
+          <config>?
+    )">();
+
+    ASSERT_TRUE(spec.has_value());
+    ASSERT_EQ(spec->narg, 1);
+    EXPECT_EQ(spec->args[0].name.view(spec->source), "config");
+    EXPECT_FALSE(spec->args[0].variadic);
+    EXPECT_FALSE(spec->args[0].required);
+    EXPECT_TRUE(spec->args[0].optional());
+}
+
+TEST(CmdlineCheckTest, OptionalPositionalArgumentMustBeLast) {
+    constexpr auto bad = parse_and_check_spec<R"(
+        _Arguments
+          <config>?
+          <input>
+    )">();
+
+    ASSERT_FALSE(bad.has_value());
+    EXPECT_EQ(bad.error().error_message(), "optional argument must be last");
+}
+
 TEST(CmdlineCheckTest, AllowsCustomHelpOptionLine) {
     constexpr auto long_help = parse_and_check_spec<R"(
         _Options
@@ -427,6 +452,14 @@ TEST(CmdlineParserTest, RejectsAdjacentRepeatMarkers) {
 
     ASSERT_FALSE(positional.has_value());
     EXPECT_EQ(positional.error().error_message(), "duplicate repeat marker");
+
+    constexpr auto optional = parse_spec<R"(
+        _Arguments
+          <config>?+
+    )">();
+
+    ASSERT_FALSE(optional.has_value());
+    EXPECT_EQ(optional.error().error_message(), "duplicate repeat marker");
 
     constexpr auto plus = parse_spec<R"(
         _Options

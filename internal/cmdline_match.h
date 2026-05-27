@@ -314,7 +314,7 @@ class Cmdline {
     // Returns the runtime face map used for generated diagnostics.
     const FaceMap& faces() const { return _faces; }
 
-    // Returns a typed positional value or vector for a variadic argument.
+    // Returns a typed positional result for one argument accessor.
     template <FixedString kName>
     const ArgResult<kName>& arg() const;
 
@@ -805,7 +805,7 @@ class Cmdline {
         return Step::consumed_tokens(skip);
     }
 
-    // Consumes one positional argument token. Fixed positionals advance the
+    // Consumes one positional argument token. Scalar positionals advance the
     // current argument index, while a final variadic positional keeps accepting
     // remaining values.
     std::expected<void, CmdlineError> consume_positional(
@@ -1200,16 +1200,29 @@ Cmdline<Spec>::parse_arg_data() const {
         return parse_arg_values<Type>(arg, raw);
     } else {
         if (raw.values.empty()) {
-            return std::unexpected(
-                CmdlineError{
-                    .code = ErrorCode::kUnderflow,
-                    .info = subject_info(
-                        CmdlineErrorType::kMissingArgument, arg.name),
-                });
+            if constexpr (Spec::arg_spec(kIndex).required) {
+                return std::unexpected(
+                    CmdlineError{
+                        .code = ErrorCode::kUnderflow,
+                        .info = subject_info(
+                            CmdlineErrorType::kMissingArgument, arg.name),
+                    });
+            } else {
+                return std::optional<typename Type::type>{};
+            }
         }
 
-        return parse_typed_value<Type>(
+        auto value = parse_typed_value<Type>(
             arg.name, raw.values.front(), arg_value_location(raw, 0));
+        if (!value) {
+            return std::unexpected(value.error());
+        }
+
+        if constexpr (Spec::arg_spec(kIndex).required) {
+            return std::move(*value);
+        } else {
+            return std::optional<typename Type::type>{std::move(*value)};
+        }
     }
 }
 
@@ -1308,7 +1321,7 @@ Cmdline<Spec>::parse_opt_data_all(Values&&... values) {
     }
 }
 
-// Returns a typed positional value or vector for a variadic argument.
+// Returns a typed positional result for one argument accessor.
 template <typename Spec>
 template <FixedString kName>
 auto Cmdline<Spec>::arg() const -> const ArgResult<kName>& {

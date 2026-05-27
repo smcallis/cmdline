@@ -144,14 +144,17 @@ Positional arguments are written with angle brackets and are consumed in order.
 
 ```text
 <name>        Required string argument
+<name>?       Final zero-or-one optional string argument
 <name>+       Final one-or-more variadic string argument
 <name>*       Final zero-or-more variadic string argument
 <name:type>   Required typed argument
+<name:type>?  Final zero-or-one optional typed argument
 <name:type>+  Final one-or-more variadic typed argument
 <name:type>*  Final zero-or-more variadic typed argument
 ```
 
-There can be at most one variadic positional argument, and it must be last. A
+`?`, `+`, and `*` positional arguments must be last. `?` accepts zero or one
+value, `+` accepts one or more values, and `*` accepts zero or more values. A
 bare `-` is accepted as a positional value, which lets file-like arguments use
 `-` for stdin or stdout.
 
@@ -276,6 +279,7 @@ if (cmdline->opt<"--help">()) {
 Accessor return types are derived from the spec:
 
 - Positional arguments return `T`.
+- Optional positional arguments return `std::optional<T>`.
 - Variadic positional arguments return `std::vector<T>`.
 - Optional value options return `std::optional<T>`.
 - Required or defaulted value options return `T`.

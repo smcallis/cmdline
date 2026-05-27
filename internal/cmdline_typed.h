@@ -262,13 +262,21 @@ struct TypedSpec {
     static constexpr bool defaults_valid =
         validate_defaults(std::make_index_sequence<nopt>{});
 
-    // Represents a positional argument as either one value or a variadic
-    // vector.
+    // Represents a fixed positional argument as either one required value or
+    // an optional value.
+    template <size_t kIndex>
+    using ScalarArgData = std::conditional_t<
+        arg_spec(kIndex).required,           //
+        ArgValueType<kIndex>,                //
+        std::optional<ArgValueType<kIndex>>  //
+        >;
+
+    // Represents a positional argument according to its cardinality.
     template <size_t kIndex>
     using ArgData = std::conditional_t<
         arg_spec(kIndex).variadic,          //
         std::vector<ArgValueType<kIndex>>,  //
-        ArgValueType<kIndex>                //
+        ScalarArgData<kIndex>               //
         >;
 
     // Represents a valueless option as either a flag or occurrence count.

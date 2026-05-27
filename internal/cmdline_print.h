@@ -384,8 +384,9 @@ struct UsageWriter {
         token += style(arg.face_name, arg.usage_label());
         token += style("cmdline-arg-bracket", ">");
 
-        if (arg.accepts_many) {
-            token += style("cmdline-arg-repeat", arg.required ? "+" : "*");
+        char marker = arg.marker();
+        if (marker != '\0') {
+            token += style("cmdline-arg-repeat", std::string(1, marker));
         }
         return token;
     }

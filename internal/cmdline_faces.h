@@ -81,7 +81,7 @@ inline FaceMap default_syntax_faces() {
         // Styles angle brackets around positional argument names.
         {"cmdline-arg-bracket", {}},
 
-        // Styles the '+' marker on variadic positional arguments.
+        // Styles positional argument cardinality markers.
         {"cmdline-arg-repeat", fmt::fg(fmt::color::indian_red)},
 
         // Styles option and switch names.

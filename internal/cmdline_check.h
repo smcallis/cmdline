@@ -80,6 +80,18 @@ constexpr ParseStatus check_variadic_is_last(const ParsedSpec<N, M>& spec) {
     return {};
 }
 
+// Checks whether optional positional arguments appear only at the end.
+template <size_t N, size_t M>
+constexpr ParseStatus check_optional_is_last(const ParsedSpec<N, M>& spec) {
+    for (size_t i = 1; i < spec.narg; ++i) {
+        if (spec.args[i - 1].optional()) {
+            return std::unexpected(make_error(
+                spec, spec.args[i - 1].name, ParseError::kOptionalArgNotLast));
+        }
+    }
+    return {};
+}
+
 // Checks for duplicate argument names.
 template <size_t N, size_t M>
 constexpr ParseStatus check_duplicate_arguments(const ParsedSpec<N, M>& spec) {
@@ -233,6 +245,11 @@ constexpr ParseStatus check_spec(const ParsedSpec<N, M>& spec) {
     ParseStatus variadic = check_variadic_is_last(spec);
     if (!variadic) {
         return std::unexpected(variadic.error());
+    }
+
+    ParseStatus optional = check_optional_is_last(spec);
+    if (!optional) {
+        return std::unexpected(optional.error());
     }
 
     ParseStatus args = check_duplicate_arguments(spec);

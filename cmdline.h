@@ -89,16 +89,19 @@ namespace cmd {
 //     the command line and have one of these forms:
 //
 //       `<name>`        Required string argument
+//       `<name>?`       Final zero-or-one optional string argument
 //       `<name>+`       Final one-or-more variadic string argument
 //       `<name>*`       Final zero-or-more variadic string argument
 //       `<name:type>`   Required typed argument
+//       `<name:type>?`  Final zero-or-one optional typed argument
 //       `<name:type>+`  Final one-or-more variadic typed argument
 //       `<name:type>*`  Final zero-or-more variadic typed argument
 //
-//     There can be at most one variadic argument, and it must be last. `+`
-//     requires at least one value, while `*` accepts none. If an argument name
-//     matches a registered type name, `<path>` is shorthand for `<path:path>`.
-//     To use that name as a string argument, write `<path:string>`.
+//     `?`, `+`, and `*` arguments must be last. `?` accepts zero or one value,
+//     `+` accepts one or more values, and `*` accepts zero or more values. If
+//     an argument name matches a registered type name, `<path>` is shorthand
+//     for `<path:path>`. To use that name as a string argument, write
+//     `<path:string>`.
 //
 //   Options and switches
 //     Options have this general form.
@@ -211,6 +214,7 @@ namespace cmd {
 //
 //   Accessors return const references to stored values.
 //     - Positional arguments return `T`.
+//     - Optional positional arguments return `std::optional<T>`.
 //     - Variadic arguments return `std::vector<T>`.
 //     - Optional value options return `std::optional<T>`.
 //     - Required or defaulted value options return `T`.
@@ -307,6 +311,9 @@ namespace cmd {
 //
 //   A final positional argument that consumes zero or more remaining values.
 //     `<files>*`
+//
+//   A final positional argument that consumes zero or one value.
+//     `<config>?`
 //
 //   A switch enabled with --long and disabled with --no-long, last one wins.
 //     `--long>`

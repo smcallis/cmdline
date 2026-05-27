@@ -29,6 +29,18 @@ struct PosArg {
     bool accepts_many = false;
     bool required     = true;
 
+    // Returns the cardinality marker used in generated usage text.
+    char marker() const {
+        if (accepts_many) {
+            return required ? '+' : '*';
+        }
+
+        if (!required) {
+            return '?';
+        }
+        return '\0';
+    }
+
     // Returns the display label used in generated usage text.
     std::string_view usage_label() const {
         if (!value_label.empty()) {
@@ -39,7 +51,7 @@ struct PosArg {
 
     // Returns the display width of the positional usage token.
     size_t usage_width() const {
-        return usage_label().size() + 2 + accepts_many;
+        return usage_label().size() + 2 + (marker() != '\0');
     }
 };
 
