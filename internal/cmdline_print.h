@@ -38,6 +38,8 @@ inline bool color_enabled(FILE* file) {
 
 // Holds a printable command line and a caret column within it.
 struct CmdlineContext {
+    std::string source_name;
+    size_t source_row = 0;
     std::string line;
     size_t column = 0;
 };
@@ -129,7 +131,12 @@ inline CmdlineContext make_cmdline_context(
     const ValueLocation& location = error.location;
     if (!location.source_line.empty()) {
         return trim_cmdline_context(
-            CmdlineContext{location.source_line, location.source_column});
+            CmdlineContext{
+                .source_name = location.source_name,
+                .source_row  = location.source_row,
+                .line        = location.source_line,
+                .column      = location.source_column,
+            });
     }
 
     CmdlineContext context;
@@ -239,6 +246,17 @@ inline void append_cmdline_context(
     std::string_view context_face, std::string_view caret_face, bool color) {
     if (context.line.empty()) {
         return;
+    }
+
+    if (!context.source_name.empty()) {
+        append_diagnostic_prefix(output, faces, color);
+        output +=
+            styled(find_face(faces, context_face), context.source_name, color);
+        if (context.source_row != 0) {
+            output +=
+                fmt::format(":{}:{}", context.source_row, context.column + 1);
+        }
+        output += "\n";
     }
 
     append_diagnostic_prefix(output, faces, color);

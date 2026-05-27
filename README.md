@@ -288,12 +288,18 @@ Accessor return types are derived from the spec:
 - Counting switches return `int`.
 
 `set<"--long">()` and `set<"-s">()` report whether an option was present on
-argv. This is useful when an option has a default but the program still needs to
-know whether the user explicitly set it.
+argv or in a response file. This is useful when an option has a default but the
+program still needs to know whether the user explicitly set it.
 
 Value-taking options consume the next token greedily, even if it begins with
 `-` or is exactly `--`. Otherwise, `--` stops option parsing and all remaining
 tokens are positional arguments.
+
+Response files follow GCC behavior. An argv token like `@args.rsp` is replaced
+by whitespace-separated tokens read from that file. Single quotes, double
+quotes, and backslash escapes can preserve whitespace or include special
+characters. Response files may refer to other response files. If a response file
+cannot be read, the original `@file` token is left unchanged.
 
 Generated usage preserves declaration order. It is colorized when printed to a
 TTY. Set `FORCE_COLOR` to force color output. Set `NO_COLOR` to disable color

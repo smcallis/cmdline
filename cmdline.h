@@ -208,9 +208,9 @@ namespace cmd {
 //   Positional arguments are accessed by bare name with `arg<"name">()`.
 //   Options and switches are accessed by their command-line spelling with
 //   `opt<"--long">()` or `opt<"-s">()`. `set<"--long">()` and `set<"-s">()`
-//   return whether that option was present on argv. If an option has a long
-//   and short name either is acceptable to use, both variants return the same
-//   value. Accessor names are checked at compile time.
+//   return whether that option was present on argv or in a response file. If an
+//   option has a long and short name either is acceptable to use, both variants
+//   return the same value. Accessor names are checked at compile time.
 //
 //   Accessors return const references to stored values.
 //     - Positional arguments return `T`.
@@ -240,6 +240,12 @@ namespace cmd {
 //   Unknown options are errors. Short switches may be grouped as `-abc`, but a
 //   short switch block may not contain a value-taking option. Short value
 //   options accept `-o=value`, but not `-ovalue`.
+//
+//   Response files follow GCC behavior. An argv token like `@args.rsp` is
+//   replaced by whitespace-separated tokens read from that file. Single quotes,
+//   double quotes, and backslash escapes can preserve whitespace or include
+//   special characters. Response files may refer to other response files. If a
+//   response file cannot be read, the original `@file` token is left unchanged.
 //
 //   Generated usage preserves declaration order. It is colorized when written
 //   to a TTY. Set FORCE_COLOR to force color output. Set NO_COLOR to disable

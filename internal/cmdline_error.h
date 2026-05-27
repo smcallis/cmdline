@@ -147,25 +147,53 @@ struct TypeConversionError {
 // Identifies where an option or argument value came from.
 enum class ValueOrigin {
     kUnknown = 0,
-    kArgv,         // Originated in the argv string.
-    kEnvironment,  // Originated in an environment variable.
-    kDefault,      // Originated from a default tag.
+    kArgv,          // Originated in the argv string.
+    kResponseFile,  // Originated in a response file.
+    kEnvironment,   // Originated in an environment variable.
+    kDefault,       // Originated from a default tag.
 };
 
 // Records value provenance and caret placement for runtime diagnostics. Values
-// from argv point back into the original token stream, while environment and
-// default values carry a synthetic source line that can be printed directly.
+// from argv point back into the original token stream. Response files,
+// environment values, and default values carry source lines that can be printed
+// directly.
 struct ValueLocation {
     ValueOrigin origin     = ValueOrigin::kUnknown;
     bool has_location      = false;
     size_t argument_index  = 0;
     size_t argument_offset = 0;
+    std::string source_name;
+    size_t source_row = 0;
     std::string source_line;
     size_t source_column = 0;
 
     // Builds a source location for one argv value.
     static ValueLocation argv(size_t index, size_t offset = 0) {
-        return {ValueOrigin::kArgv, true, index, offset, "", 0};
+        return {ValueOrigin::kArgv, true, index, offset};
+    }
+
+    // Builds a source location for one response file token.
+    static ValueLocation response_file(
+        std::string_view name, size_t row, std::string_view line,
+        size_t column) {
+        return {
+            .origin        = ValueOrigin::kResponseFile,
+            .source_name   = std::string(name),
+            .source_row    = row,
+            .source_line   = std::string(line),
+            .source_column = column,
+        };
+    }
+
+    // Returns this location with `offset` added to the caret column.
+    ValueLocation with_offset(size_t offset) const {
+        ValueLocation copy = *this;
+        if (!copy.source_line.empty()) {
+            copy.source_column += offset;
+        } else {
+            copy.argument_offset += offset;
+        }
+        return copy;
     }
 
     // Builds a source location for one environment value.
@@ -175,8 +203,11 @@ struct ValueLocation {
         line += "=";
         size_t column = line.size();
         line += value;
-        return {ValueOrigin::kEnvironment, false, 0, 0,
-                std::move(line),           column};
+        return {
+            .origin        = ValueOrigin::kEnvironment,
+            .source_line   = std::move(line),
+            .source_column = column,
+        };
     }
 
     // Builds a source location for one defaulted value.
@@ -185,7 +216,11 @@ struct ValueLocation {
         size_t column = line.size();
         line += value;
         line += "]";
-        return {ValueOrigin::kDefault, false, 0, 0, std::move(line), column};
+        return {
+            .origin        = ValueOrigin::kDefault,
+            .source_line   = std::move(line),
+            .source_column = column,
+        };
     }
 };
 
