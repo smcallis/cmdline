@@ -38,7 +38,7 @@ set(
     tests/compile_fail/int_invalid_default.cc
     tests/compile_fail/uint_invalid_default.cc)
 
-find_program(CLANG_FORMAT_EXE NAMES clang-format-20 clang-format)
+find_program(CLANG_FORMAT_EXE NAMES clang-format-20)
 
 if(CLANG_FORMAT_EXE)
     add_custom_target(
@@ -49,7 +49,7 @@ if(CLANG_FORMAT_EXE)
 else()
     add_custom_target(
         format-check
-        COMMAND ${CMAKE_COMMAND} -E echo "clang-format was not found"
+        COMMAND ${CMAKE_COMMAND} -E echo "clang-format-20 was not found"
         COMMAND ${CMAKE_COMMAND} -E false
         VERBATIM)
 endif()
