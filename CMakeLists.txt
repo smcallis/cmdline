@@ -20,6 +20,7 @@ add_custom_target(
 set(
     CMDLINE_FORMAT_FILES
     cmdline.h
+    cmdline_files.h
     example.cc
     internal/cmdline_check.h
     internal/cmdline_error.h

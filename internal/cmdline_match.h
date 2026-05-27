@@ -18,6 +18,7 @@
 
 #include "cmdline_error.h"
 #include "cmdline_faces.h"
+#include "cmdline_files.h"
 #include "cmdline_model.h"
 #include "cmdline_parse.h"
 #include "cmdline_print.h"
@@ -79,6 +80,11 @@ inline std::vector<std::string> fallback_values(
     return {std::string(text)};
 }
 
+// Returns whether a value was supplied by argv or a response file.
+inline bool is_command_line_value(ValueOrigin origin) {
+    return origin == ValueOrigin::kArgv || origin == ValueOrigin::kResponseFile;
+}
+
 // Returns the user-facing source name for one option value.
 inline std::string option_value_context(
     const Option& option, const ValueLocation& location) {
@@ -124,16 +130,9 @@ inline std::string short_option_token(char name) {
 
 // Returns whether argv contains a built-in help spelling before '--'.
 inline bool argv_requests_help(int argc, const char* const argv[]) {
-    if (argv == nullptr) {
-        return false;
-    }
-
-    for (int index = 1; index < argc; ++index) {
-        if (argv[index] == nullptr) {
-            continue;
-        }
-
-        std::string_view token(argv[index]);
+    std::vector<ResponseToken> tokens = expand_response_files(argc, argv);
+    for (size_t index = 1; index < tokens.size(); ++index) {
+        std::string_view token(tokens[index].value);
         if (token == "--") {
             return false;
         }
@@ -149,22 +148,24 @@ inline bool argv_requests_help(int argc, const char* const argv[]) {
     return false;
 }
 
-// Walks argv tokens while preserving original argv indexes for diagnostics.
-// argv is already shell-tokenized, so this cursor only needs peek/drop helpers
-// rather than a character-level parser.
+// Walks expanded argv tokens while preserving source locations for
+// diagnostics. Response files have already been tokenized, so this cursor only
+// needs peek, drop, and location helpers.
 class Argv {
  public:
-    // Stores the argv array and starts at the first user argument.
-    Argv(int argc, const char* const argv[]) : _argc(argc), _argv(argv) {}
+    // Stores the expanded token span and starts at the first user argument.
+    explicit Argv(std::span<const ResponseToken> tokens) : _tokens(tokens) {}
 
     // Returns whether no user tokens remain.
-    bool done() const { return _index >= _argc; }
+    bool done() const { return _index >= _tokens.size(); }
 
     // Returns whether a token exists at the current cursor plus `offset`.
     bool has(int offset = 0) const {
-        int index = _index + offset;
-        return index >= 0 && index < _argc && _argv != nullptr &&
-               _argv[index] != nullptr;
+        if (offset < 0) {
+            return false;
+        }
+        size_t index = _index + static_cast<size_t>(offset);
+        return index < _tokens.size();
     }
 
     // Returns the current token plus `offset`, or empty text if absent.
@@ -172,19 +173,28 @@ class Argv {
         if (!has(offset)) {
             return {};
         }
-        return _argv[_index + offset];
+        return _tokens[_index + static_cast<size_t>(offset)].value;
     }
 
-    // Returns the original argv index of the current token.
-    size_t index() const { return static_cast<size_t>(_index); }
+    // Returns the source location for the current token plus `offset`.
+    ValueLocation location(int offset = 0) const {
+        if (!has(offset)) {
+            return {};
+        }
+        return _tokens[_index + static_cast<size_t>(offset)].location;
+    }
+
+    // Returns the source location for the current token plus a caret offset.
+    ValueLocation location_at(size_t offset) const {
+        return location().with_offset(offset);
+    }
 
     // Advances the cursor by `count` tokens.
     void drop(int count = 1) { _index += count; }
 
  private:
-    int _argc                = 0;
-    const char* const* _argv = nullptr;
-    int _index               = 1;
+    std::span<const ResponseToken> _tokens;
+    size_t _index = 1;
 };
 
 // Describes the result of trying one argv parser rule. Rules report how many
@@ -212,8 +222,8 @@ struct RawArg {
 
 // Stores raw strings and occurrence state for one option. `is_set` is the
 // effective option state after repeat policy is applied, while `specified`
-// tracks whether argv mentioned the option even if an ignored repeat value was
-// not retained.
+// tracks whether the command line mentioned the option even if an ignored
+// repeat value was not retained.
 struct RawOpt {
     bool is_set    = false;
     bool specified = false;
@@ -322,7 +332,8 @@ class Cmdline {
     template <FixedString kName>
     const OptionResult<kName>& opt() const;
 
-    // Returns whether an option spelling was present on argv.
+    // Returns whether an option spelling was present on argv or a response
+    // file.
     template <FixedString kName>
     bool set() const;
 
@@ -616,7 +627,7 @@ class Cmdline {
             return std::unexpected(make_error(
                 ErrorCode::kBadArgument,
                 value_info(CmdlineErrorType::kUnexpectedArgument, _argv.peek()),
-                _argv.index()));
+                _argv.location()));
         }
         return {};
     }
@@ -692,13 +703,13 @@ class Cmdline {
                         ErrorCode::kUnknown,
                         subject_info(
                             CmdlineErrorType::kUnknownOption, short_token),
-                        _argv.index(), pos));
+                        _argv.location_at(pos)));
             }
 
             const Option& option = _opts[*index];
             RawOpt& raw          = _raw.opts[*index];
             std::expected<void, CmdlineError> result =
-                set_switch(option, raw, true, _argv.index(), pos);
+                set_switch(option, raw, true, _argv.location_at(pos));
             if (!result) {
                 return std::unexpected(result.error());
             }
@@ -726,7 +737,7 @@ class Cmdline {
                     ErrorCode::kBadArgument,
                     subject_info(
                         CmdlineErrorType::kNoValueAllowed, option_token),
-                    _argv.index(), equals));
+                    _argv.location_at(equals)));
             }
             _raw.help_requested = true;
             return Step::consumed_tokens(1);
@@ -736,7 +747,7 @@ class Cmdline {
             return std::unexpected(make_error(
                 ErrorCode::kUnknown,
                 subject_info(CmdlineErrorType::kUnknownOption, token),
-                _argv.index()));
+                _argv.location()));
         }
 
         const Option& option = _opts[*index];
@@ -757,12 +768,12 @@ class Cmdline {
             return std::unexpected(make_error(
                 ErrorCode::kBadArgument,
                 subject_info(CmdlineErrorType::kNoValueAllowed, option_token),
-                _argv.index(), option_token.size()));
+                _argv.location_at(option_token.size())));
         }
 
         bool enabled = !option_token.starts_with("--no-");
         std::expected<void, CmdlineError> result =
-            set_switch(option, raw, enabled, _argv.index());
+            set_switch(option, raw, enabled, _argv.location());
         if (!result) {
             return std::unexpected(result.error());
         }
@@ -776,12 +787,11 @@ class Cmdline {
         const Option& option, RawOpt& raw, std::string_view option_token,
         const std::optional<std::string>& inline_value, size_t equals) {
         std::string value;
-        size_t value_index  = _argv.index();
-        size_t value_offset = 0;
-        int skip            = 1;
+        ValueLocation value_location = _argv.location();
+        int skip                     = 1;
         if (inline_value) {
-            value        = *inline_value;
-            value_offset = equals + 1;
+            value          = *inline_value;
+            value_location = _argv.location_at(equals + 1);
 
         } else {
             if (!_argv.has(1)) {
@@ -789,16 +799,16 @@ class Cmdline {
                     ErrorCode::kIncomplete,
                     subject_info(
                         CmdlineErrorType::kValueRequired, option_token),
-                    _argv.index()));
+                    _argv.location()));
             }
 
-            value_index = _argv.index() + 1;
-            value       = _argv.peek(1);
-            skip        = 2;
+            value_location = _argv.location(1);
+            value          = _argv.peek(1);
+            skip           = 2;
         }
 
-        std::expected<void, CmdlineError> result = set_value(
-            option, raw, value, ValueLocation::argv(value_index, value_offset));
+        std::expected<void, CmdlineError> result =
+            set_value(option, raw, value, value_location);
         if (!result) {
             return std::unexpected(result.error());
         }
@@ -815,21 +825,20 @@ class Cmdline {
             if (!args.empty() && args.back().accepts_many) {
                 RawArg& raw = _raw.args.back();
                 raw.values.push_back(std::string(token));
-                raw.value_locations.push_back(
-                    ValueLocation::argv(_argv.index()));
+                raw.value_locations.push_back(_argv.location());
                 return {};
             }
 
             return std::unexpected(make_error(
                 ErrorCode::kOverflow,
                 value_info(CmdlineErrorType::kUnexpectedPositional, token),
-                _argv.index()));
+                _argv.location()));
         }
 
         const PosArg& arg = args[_arg_index];
         RawArg& raw       = _raw.args[_arg_index];
         raw.values.push_back(std::string(token));
-        raw.value_locations.push_back(ValueLocation::argv(_argv.index()));
+        raw.value_locations.push_back(_argv.location());
         if (!arg.accepts_many) {
             ++_arg_index;
         }
@@ -839,8 +848,8 @@ class Cmdline {
     // Records a switch occurrence. Count switches accumulate, first/last
     // switches apply repeat policy, and ordinary switches reject repeats.
     std::expected<void, CmdlineError> set_switch(
-        const Option& option, RawOpt& raw, bool enabled, size_t argument_index,
-        size_t argument_offset = 0) {
+        const Option& option, RawOpt& raw, bool enabled,
+        const ValueLocation& location) {
         if (option.count_occurrences) {
             raw.is_set    = true;
             raw.specified = true;
@@ -853,7 +862,7 @@ class Cmdline {
                 ErrorCode::kAlreadySet,
                 subject_info(
                     CmdlineErrorType::kRepeatedOption, option.full_name()),
-                argument_index, argument_offset));
+                location));
         }
 
         if (option.repeat == RepeatPolicy::kFirst && raw.count != 0) {
@@ -882,7 +891,7 @@ class Cmdline {
         }
 
         if (option.repeat == RepeatPolicy::kFirst && raw.is_set) {
-            if (location.origin == ValueOrigin::kArgv) {
+            if (is_command_line_value(location.origin)) {
                 raw.specified = true;
             }
             ++raw.count;
@@ -895,7 +904,7 @@ class Cmdline {
         }
 
         raw.is_set = true;
-        if (location.origin == ValueOrigin::kArgv) {
+        if (is_command_line_value(location.origin)) {
             raw.specified = true;
         }
         ++raw.count;
@@ -957,7 +966,8 @@ class Cmdline {
     // rule order is "--" terminator, option token, then positional token.
     std::expected<void, CmdlineError> process(
         int argc, const char* const argv[]) {
-        _argv = Argv(argc, argv);
+        _tokens = expand_response_files(argc, argv);
+        _argv   = Argv(_tokens);
         while (!_argv.done()) {
             std::expected<bool, CmdlineError> stopped = accept(stop_token());
             if (!stopped) {
@@ -1001,7 +1011,8 @@ class Cmdline {
     // Runtime formatting policy and raw parse state.
     FaceMap _faces;
     RawCmdline _raw;
-    Argv _argv{0, nullptr};
+    std::vector<ResponseToken> _tokens;
+    Argv _argv{std::span<const ResponseToken>{}};
 
     // Typed accessor storage filled after raw matching succeeds.
     ArgDataTuple _arg_data;
@@ -1341,7 +1352,7 @@ auto Cmdline<Spec>::opt() const -> const OptionResult<kName>& {
     }
 }
 
-// Returns whether an option spelling was present on argv.
+// Returns whether an option spelling was present on argv or a response file.
 template <typename Spec>
 template <FixedString kName>
 bool Cmdline<Spec>::set() const {

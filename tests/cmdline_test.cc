@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include "cmdline_test_helpers.h"
 
@@ -204,6 +205,55 @@ auto runtime_cmdline(std::span<const UsageFace> faces = {}) {
     return Cmdline<kSpecText, Lists...>::help(1, argv, faces);
 }
 
+// Returns a unique temporary response-file path for one test process.
+std::string next_response_file_path() {
+    static int next = 0;
+    const char* tmp = std::getenv("TMPDIR");
+
+    std::string path = (tmp == nullptr || tmp[0] == '\0') ? "/tmp" : tmp;
+    if (!path.ends_with('/')) {
+        path.push_back('/');
+    }
+
+    path += "cmdline-response-" + std::to_string(getpid()) + "-" +
+            std::to_string(next++) + ".rsp";
+    return path;
+}
+
+// Owns a temporary response file and removes it after the test.
+class ResponseFile {
+ public:
+    // Writes response-file text to a unique temporary path.
+    explicit ResponseFile(std::string_view text)
+        : _path(next_response_file_path()) {
+        FILE* file = std::fopen(_path.c_str(), "wb");
+        EXPECT_NE(file, nullptr);
+        if (file == nullptr) {
+            return;
+        }
+
+        EXPECT_EQ(std::fwrite(text.data(), 1, text.size(), file), text.size());
+        std::fclose(file);
+    }
+
+    ResponseFile(const ResponseFile&)            = delete;
+    ResponseFile& operator=(const ResponseFile&) = delete;
+    ResponseFile(ResponseFile&&)                 = delete;
+    ResponseFile& operator=(ResponseFile&&)      = delete;
+
+    // Removes the temporary file, ignoring cleanup failures.
+    ~ResponseFile() { std::remove(_path.c_str()); }
+
+    // Returns the response file path as plain text.
+    std::string path() const { return _path; }
+
+    // Returns the argv token that asks cmdline to expand this file.
+    std::string argv_token() const { return "@" + path(); }
+
+ private:
+    std::string _path;
+};
+
 TEST(CmdlineTest, ParserAcceptsCanonicalSpec) {
     auto parsed      = runtime_cmdline<kSpec>();
     std::string help = strip_ansi(rendered_usage<kSpec>("sync"));
@@ -234,6 +284,111 @@ TEST(CmdlineTest, JoinedSpecsWorkThroughPublicEntryPoint) {
     EXPECT_EQ(parsed->arg<"input">(), "file");
     ASSERT_TRUE(parsed->opt<"--token">());
     EXPECT_EQ(*parsed->opt<"--token">(), "secret");
+}
+
+TEST(CmdlineTest, ResponseFilesExpandArgumentsAndOptions) {
+    ResponseFile file(
+        "--token secret --format yaml --tag nightly src dst inc1 inc2");
+    std::string response = file.argv_token();
+    const char* argv[]   = {"sync", response.c_str()};
+
+    auto parsed = try_parse_cmdline<kSpec>(2, argv);
+
+    ASSERT_TRUE(parsed) << cmdline_error_message(parsed.error());
+    EXPECT_EQ(parsed->opt<"--token">(), "secret");
+    EXPECT_EQ(parsed->opt<"--format">(), "yaml");
+    EXPECT_EQ(parsed->opt<"--tag">(), (std::vector<std::string>{"nightly"}));
+    EXPECT_EQ(parsed->arg<"source">(), "src");
+    EXPECT_EQ(parsed->arg<"destination">(), "dst");
+    EXPECT_EQ(
+        parsed->arg<"include">(), (std::vector<std::string>{"inc1", "inc2"}));
+    EXPECT_TRUE(parsed->set<"--token">());
+}
+
+TEST(CmdlineTest, ResponseFilesUseGccQuoteAndBackslashRules) {
+    ResponseFile file(R"("two words" 'single quoted' escaped\ space a\"b "")");
+    std::string response = file.argv_token();
+    const char* argv[]   = {"tool", response.c_str()};
+
+    auto parsed = try_parse_cmdline<R"(
+        _Arguments
+          <one>
+          <two>
+          <three>
+          <four>
+          <five>
+    )">(2, argv);
+
+    ASSERT_TRUE(parsed) << cmdline_error_message(parsed.error());
+    EXPECT_EQ(parsed->arg<"one">(), "two words");
+    EXPECT_EQ(parsed->arg<"two">(), "single quoted");
+    EXPECT_EQ(parsed->arg<"three">(), "escaped space");
+    EXPECT_EQ(parsed->arg<"four">(), "a\"b");
+    EXPECT_EQ(parsed->arg<"five">(), "");
+}
+
+TEST(CmdlineTest, ResponseFilesExpandNestedResponseFiles) {
+    ResponseFile inner("--tag nested src dst inc");
+    ResponseFile outer(
+        "--token secret " + inner.argv_token() + " --format yaml");
+    std::string response = outer.argv_token();
+    const char* argv[]   = {"sync", response.c_str()};
+
+    auto parsed = try_parse_cmdline<kSpec>(2, argv);
+
+    ASSERT_TRUE(parsed) << cmdline_error_message(parsed.error());
+    EXPECT_EQ(parsed->opt<"--format">(), "yaml");
+    EXPECT_EQ(parsed->opt<"--tag">(), (std::vector<std::string>{"nested"}));
+    EXPECT_EQ(parsed->arg<"source">(), "src");
+    EXPECT_EQ(parsed->arg<"destination">(), "dst");
+}
+
+TEST(CmdlineTest, UnreadableResponseFilesRemainLiteralTokens) {
+    std::string response = "@" + next_response_file_path();
+    const char* argv[]   = {"tool", response.c_str()};
+
+    auto parsed = try_parse_cmdline<R"(
+        _Arguments
+          <value>
+    )">(2, argv);
+
+    ASSERT_TRUE(parsed) << cmdline_error_message(parsed.error());
+    EXPECT_EQ(parsed->arg<"value">(), response);
+}
+
+TEST(CmdlineTest, ResponseFilesCanRequestHelp) {
+    ResponseFile file("--help");
+    std::string response = file.argv_token();
+    const char* argv[]   = {"sync", response.c_str()};
+
+    auto parsed = try_parse_cmdline<kSpec>(2, argv);
+
+    ASSERT_TRUE(parsed) << cmdline_error_message(parsed.error());
+    EXPECT_TRUE(parsed->help_requested());
+}
+
+TEST(CmdlineTest, ResponseFileDiagnosticsUseFileContext) {
+    ResponseFile file("--format xml\nsrc dst inc\n");
+    std::string response = file.argv_token();
+    const char* argv[]   = {"sync", "--token", "secret", response.c_str()};
+
+    auto parsed = try_parse_cmdline<kSpec>(4, argv);
+
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().location.origin, ValueOrigin::kResponseFile);
+    EXPECT_EQ(parsed.error().location.source_name, file.path());
+    EXPECT_EQ(parsed.error().location.source_row, 1);
+    EXPECT_EQ(parsed.error().location.source_column, 9);
+
+    std::string error = format_cmdline_error(
+        parsed.error(), 4, argv, default_syntax_faces(), false);
+    EXPECT_NE(error.find(file.path() + ":1:10"), std::string::npos);
+    EXPECT_NE(error.find("\n │  --format xml\n"), std::string::npos);
+    EXPECT_NE(
+        error.find(
+            "^-- 'xml' is not an allowed value for --format/-f "
+            "(valid: json|yaml)"),
+        std::string::npos);
 }
 
 TEST(CmdlineTest, UsageFormatsExpectedText) {
