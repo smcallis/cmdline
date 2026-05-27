@@ -1,9 +1,13 @@
+set(include_args "-I${SOURCE_DIR}")
+foreach(include_dir IN LISTS INCLUDE_DIRS)
+    list(APPEND include_args "-I${include_dir}")
+endforeach()
+
 execute_process(
     COMMAND
     "${CXX}"
     "-std=c++${STANDARD}"
-    "-I${SOURCE_DIR}"
-    "-I${SOURCE_DIR}/fmt/include"
+    ${include_args}
     -fsyntax-only
     "${SOURCE_DIR}/${SOURCE}"
     RESULT_VARIABLE result

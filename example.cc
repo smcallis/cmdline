@@ -5,11 +5,6 @@
 
 #include "cmdline.h"
 
-#include <string>
-#include <vector>
-
-#include "cmdline.h"
-
 int main(int argc, const char* argv[]) {
     auto cmdline = cmd::parse_cmdline<R"(
         Sync files to a destination.
@@ -27,15 +22,15 @@ int main(int argc, const char* argv[]) {
           --verbose/-v+         Increase logging verbosity
     )">(argc, argv);
 
-    const std::string& source = cmdline.arg<"source">();
-    const std::string& dest = cmdline.arg<"dest">();
+    const std::string& source             = cmdline.arg<"source">();
+    const std::string& dest               = cmdline.arg<"dest">();
     const std::vector<std::string>& paths = cmdline.arg<"paths">();
 
-    const std::string& config = cmdline.opt<"--config">();
-    const std::string& format = cmdline.opt<"--format">();
+    const std::string& config            = cmdline.opt<"--config">();
+    const std::string& format            = cmdline.opt<"--format">();
     const std::vector<std::string>& tags = cmdline.opt<"--tag">();
 
-    bool dry_run = cmdline.opt<"--dry-run">();
+    bool dry_run  = cmdline.opt<"--dry-run">();
     int verbosity = cmdline.opt<"-v">();
 
     // return sync_files(
@@ -57,7 +52,8 @@ int main(int argc, const char* argv[]) {
 
 //       --config/-c=<input>       Config file to read. [env: PUBLISH_CONFIG]
 //       --old-config=<input>      Legacy config file path.
-//       --manifest/-m=<output>    Manifest path to write. [default: manifest.json]
+//       --manifest/-m=<output>    Manifest path to write. [default:
+//       manifest.json]
 //       --channel/-r=[dev|stage|prod]  Release channel. [default: stage]
 //       --define/-D=<define>+     Build define in key=value form.
 

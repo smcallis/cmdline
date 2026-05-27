@@ -28,10 +28,16 @@ struct UsageFace {
 // Maps face names to terminal styles.
 using FaceMap = std::unordered_map<std::string, fmt::text_style>;
 
+// Returns true when a style has no foreground, background, or emphasis.
+inline bool empty_style(fmt::text_style style) {
+    return !style.has_foreground() && !style.has_background() &&
+           !style.has_emphasis();
+}
+
 // Applies a style only when color output is enabled.
 inline std::string styled(
     fmt::text_style style, std::string_view text, bool color) {
-    if (!color || style == fmt::text_style()) {
+    if (!color || empty_style(style)) {
         return std::string(text);
     }
     return fmt::format(style, "{}", text);

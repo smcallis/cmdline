@@ -104,8 +104,9 @@ add_subdirectory(cmdline)
 target_link_libraries(my_tool PRIVATE cmdline)
 ```
 
-If you integrate the header manually, compile as C++23 or C++26 and link
-`{fmt}`.
+`cmdline` expects `{fmt}` to be available as a CMake package. On Debian and
+Ubuntu, install `libfmt-dev`. Tests also need `libgtest-dev`. If you integrate
+the header manually, compile as C++23 or C++26 and link `{fmt}`.
 
 ## The Spec
 
