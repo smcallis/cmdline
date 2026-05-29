@@ -20,12 +20,83 @@
 
 namespace cmd {
 
+// Represents parser status for operations that do not produce a value. This is
+// intentionally simpler than `cmd::Expected` so compile-time spec parsing does
+// not depend on library expected implementations being constexpr friendly.
+struct ParseStatus {
+    bool ok = true;
+    ParseError err{};
+
+    // Creates a successful status.
+    constexpr ParseStatus() = default;
+
+    // Adapts std::unexpected-style parse failures.
+    template <typename Failure>
+        requires requires(Failure failure) { failure.error(); }
+    constexpr ParseStatus(Failure failure) : ok(false), err(failure.error()) {}
+
+    // Adapts tl::unexpected-style parse failures.
+    template <typename Failure>
+        requires(
+                    !requires(Failure failure) { failure.error(); } &&
+                    requires(Failure failure) { failure.value(); })
+    constexpr ParseStatus(Failure failure) : ok(false), err(failure.value()) {}
+
+    // Returns whether parsing succeeded.
+    constexpr bool has_value() const { return ok; }
+    constexpr explicit operator bool() const { return ok; }
+
+    // Returns the first parse error.
+    constexpr ParseError error() const { return err; }
+
+    // Runs the next status-producing operation only after success.
+    template <typename Function>
+    constexpr ParseStatus and_then(Function function) const {
+        if (!ok) {
+            return *this;
+        }
+        return function();
+    }
+};
+
 // Represents either a parsed value or the first error that blocked parsing.
 template <typename Value>
-using ParseResult = Expected<Value, ParseError>;
+struct ParseResult {
+    bool ok = true;
+    Value val{};
+    ParseError err{};
 
-// Represents status for a parse operation that doesn't return a value.
-using ParseStatus = Expected<void, ParseError>;
+    // Creates a successful result with a default value.
+    constexpr ParseResult() = default;
+
+    // Creates a successful result.
+    constexpr ParseResult(Value value) : val(value) {}
+
+    // Adapts std::unexpected-style parse failures.
+    template <typename Failure>
+        requires requires(Failure failure) { failure.error(); }
+    constexpr ParseResult(Failure failure) : ok(false), err(failure.error()) {}
+
+    // Adapts tl::unexpected-style parse failures.
+    template <typename Failure>
+        requires(
+                    !requires(Failure failure) { failure.error(); } &&
+                    requires(Failure failure) { failure.value(); })
+    constexpr ParseResult(Failure failure) : ok(false), err(failure.value()) {}
+
+    // Returns whether parsing succeeded.
+    constexpr bool has_value() const { return ok; }
+    constexpr explicit operator bool() const { return ok; }
+
+    // Returns the parsed value.
+    constexpr Value& operator*() { return val; }
+    constexpr const Value& operator*() const { return val; }
+    constexpr Value* operator->() { return &val; }
+    constexpr const Value* operator->() const { return &val; }
+
+    // Returns the first parse error.
+    constexpr ParseError error() const { return err; }
+};
 
 // Describes one positional argument parsed from the spec.
 struct ArgSpec {
@@ -841,7 +912,7 @@ constexpr ParseResult<OptSpec> parse_opt_line(
             return Unexpected(name.error());
         }
 
-        if (name->size < 2) {
+        if ((*name).size < 2) {
             return Unexpected(make_error(
                 spec, name_begin, ParseError::kLongOptionNameTooShort));
         }

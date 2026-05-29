@@ -13,6 +13,13 @@
 #include "cmdline_error.h"
 #include "cmdline_rules.h"
 
+#if defined(__cpp_lib_constexpr_charconv) && \
+    __cpp_lib_constexpr_charconv >= 202207L
+#define CMDLINE_CONSTEXPR_CHARCONV constexpr
+#else
+#define CMDLINE_CONSTEXPR_CHARCONV
+#endif
+
 // Defines the contract for Types that convert from untyped spec strings to C++
 // types, as well as built-in default types and the default type list. To add a
 // new built-in type simply define it down below and add it to DefaultSpecTypes.
@@ -118,8 +125,7 @@ struct StringType {
 
     static constexpr std::string_view name = kDefaultTypeName;
 
-    static constexpr Expected<type, TypeConversionError> parse(
-        std::string_view text) {
+    static Expected<type, TypeConversionError> parse(std::string_view text) {
         return std::string(text);
     }
 };
@@ -131,7 +137,7 @@ struct IntType {
     static constexpr std::string_view name = "int";
 
     // Parses a signed integer from a whole string.
-    static constexpr Expected<type, TypeConversionError> parse(
+    static CMDLINE_CONSTEXPR_CHARCONV Expected<type, TypeConversionError> parse(
         std::string_view text) {
         type value{};
         auto result =
@@ -151,7 +157,7 @@ struct UintType {
     static constexpr std::string_view name = "uint";
 
     // Parses an unsigned integer from a whole string.
-    static constexpr Expected<type, TypeConversionError> parse(
+    static CMDLINE_CONSTEXPR_CHARCONV Expected<type, TypeConversionError> parse(
         std::string_view text) {
         type value{};
         auto result =
@@ -209,3 +215,5 @@ using DefaultSpecTypes =
     TypeList<StringType, IntType, UintType, FloatType, DoubleType>;
 
 }  // namespace cmd
+
+#undef CMDLINE_CONSTEXPR_CHARCONV
