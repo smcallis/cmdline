@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(cmdline LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 23 CACHE STRING "C++ standard to use")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -58,7 +58,7 @@ endif()
 add_library(cmdline INTERFACE)
 target_include_directories(cmdline INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(cmdline INTERFACE fmt::fmt)
-target_compile_features(cmdline INTERFACE cxx_std_23)
+target_compile_features(cmdline INTERFACE cxx_std_20)
 
 add_executable(example example.cc)
 target_link_libraries(example PRIVATE cmdline)
@@ -97,14 +97,16 @@ if(BUILD_TESTING)
             -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -DSOURCE=${source}
             "-DINCLUDE_DIRS=${CMDLINE_FMT_INCLUDE_DIRS}"
-            "-DREGEX=invalid command-line specification"
+            "-DREGEX=[Ii]nvalid command-line specification"
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/expect_compile_fail.cmake)
     endfunction()
 
-    add_cmdline_compile_fail_test(
-        CmdlineCompileFail.IntInvalidDefault
-        tests/compile_fail/int_invalid_default.cc)
-    add_cmdline_compile_fail_test(
-        CmdlineCompileFail.UintInvalidDefault
-        tests/compile_fail/uint_invalid_default.cc)
+    if(CMAKE_CXX_STANDARD GREATER_EQUAL 23)
+        add_cmdline_compile_fail_test(
+            CmdlineCompileFail.IntInvalidDefault
+            tests/compile_fail/int_invalid_default.cc)
+        add_cmdline_compile_fail_test(
+            CmdlineCompileFail.UintInvalidDefault
+            tests/compile_fail/uint_invalid_default.cc)
+    endif()
 endif()

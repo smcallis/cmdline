@@ -3,10 +3,43 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "cmdline_utils.h"
+
+// Defines the expected/unexpected surface used throughout cmdline. By default
+// this uses C++23 std::expected. Define CMDLINE_USE_TL_EXPECTED to force the
+// TartanLlama polyfill, or rely on the automatic fallback when <expected> is
+// unavailable.
+
+#if !defined(CMDLINE_USE_TL_EXPECTED)
+#if __has_include(<expected>)
+#include <expected>
+#endif
+#endif
+
+#if !defined(CMDLINE_USE_TL_EXPECTED) && defined(__cpp_lib_expected) && \
+    __cpp_lib_expected >= 202202L
+#define CMDLINE_HAS_STD_EXPECTED 1
+#else
+#define CMDLINE_HAS_TL_EXPECTED 1
+#if __has_include("../tl/expected.hpp")
+#include "../tl/expected.hpp"
+#elif __has_include("../expected.hpp")
+#include "../expected.hpp"
+#elif __has_include(<tl/expected.hpp>)
+#include <tl/expected.hpp>
+#else
+#error \
+    "cmdline requires <expected> or TartanLlama expected.hpp next to cmdline.h"
+#endif
+
+#ifndef TL_EXPECTED_HPP
+#error "cmdline expected polyfill support requires TartanLlama expected.hpp"
+#endif
+#endif
 
 // Defines compile-time command-spec parse diagnostics and error string
 // formatting. C++26 allows compile-time strings in static_asserts allowing for
@@ -22,6 +55,28 @@
 #endif
 
 namespace cmd {
+
+#if defined(CMDLINE_HAS_STD_EXPECTED)
+
+template <typename Value, typename Error>
+using Expected = std::expected<Value, Error>;
+
+template <typename Error>
+constexpr auto Unexpected(Error&& error) {
+    return std::unexpected<std::decay_t<Error>>(std::forward<Error>(error));
+}
+
+#else
+
+template <typename Value, typename Error>
+using Expected = tl::expected<Value, Error>;
+
+template <typename Error>
+constexpr auto Unexpected(Error&& error) {
+    return tl::unexpected<std::decay_t<Error>>(std::forward<Error>(error));
+}
+
+#endif
 
 // Carries the first parse or check error found in a command spec.
 struct ParseError {

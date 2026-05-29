@@ -1,5 +1,3 @@
-#include <expected>
-
 #include <gtest/gtest.h>
 
 #include "internal/cmdline_check.h"
@@ -35,7 +33,7 @@ template <FixedString kSpecText>
 constexpr ParseStatus parse_and_check_spec() {
     constexpr auto parsed = parse_spec<kSpecText>();
     if constexpr (!parsed.has_value()) {
-        return std::unexpected(parsed.error());
+        return Unexpected(parsed.error());
     } else {
         return check_spec(*parsed);
     }

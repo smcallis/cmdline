@@ -8,6 +8,28 @@ jobs:
   test:
     runs-on: ubuntu-24.04
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gcc-cxx20
+            compiler: g++-13
+            standard: 20
+          - name: gcc-cxx23
+            compiler: g++-13
+            standard: 23
+          - name: llvm-cxx20
+            compiler: clang++-20
+            standard: 20
+          - name: llvm-cxx23
+            compiler: clang++-20
+            standard: 23
+          - name: llvm-cxx26
+            compiler: clang++-20
+            standard: 26
+
+    name: ${{ matrix.name }}
+
     steps:
       - name: Check out
         uses: actions/checkout@v5
@@ -17,23 +39,70 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             clang-format-20 \
+            clang-20 \
             cmake \
+            curl \
             g++-13 \
             libfmt-dev \
             libgtest-dev \
             ninja-build
 
+      - name: Install expected polyfill
+        if: matrix.standard == 20
+        run: >
+          curl -fsSL
+          https://raw.githubusercontent.com/TartanLlama/expected/master/include/tl/expected.hpp
+          -o expected.hpp
+
       - name: Configure
         run: >
-          cmake -S . -B build -G Ninja
+          cmake -S . -B build-${{ matrix.name }} -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_CXX_COMPILER=g++-13
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_CXX_STANDARD=${{ matrix.standard }}
 
       - name: Check formatting
-        run: cmake --build build --target format-check
+        if: matrix.name == 'gcc-cxx23'
+        run: cmake --build build-${{ matrix.name }} --target format-check
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build-${{ matrix.name }}
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build-${{ matrix.name }} --output-on-failure
+
+  gcc-cxx26:
+    name: gcc-cxx26
+    runs-on: ubuntu-24.04
+    container: gcc:15
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            ca-certificates \
+            cmake \
+            git \
+            libfmt-dev \
+            libgtest-dev \
+            ninja-build
+
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Show compiler
+        run: g++ --version
+
+      - name: Configure
+        run: >
+          cmake -S . -B build-gcc-cxx26 -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=g++
+          -DCMAKE_CXX_STANDARD=26
+
+      - name: Build
+        run: cmake --build build-gcc-cxx26
+
+      - name: Test
+        run: ctest --test-dir build-gcc-cxx26 --output-on-failure
