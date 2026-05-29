@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <expected>
 #include <span>
 #include <string>
 #include <string_view>
@@ -186,9 +185,11 @@ namespace cmd {
 //   short name for any non-help option.
 //
 //   If exiting the program is undesirable, then `try_parse_cmdline` is an
-//   alternative that returns `std::expected<Cmdline, CmdlineError>`.
-//   `CmdlineError` stores structured details and a value location. Use
-//   `cmdline_error_message(error)` for a short message, or
+//   alternative that returns `cmd::Expected<Cmdline, CmdlineError>`.
+//   `cmd::Expected` aliases `std::expected` by default, or TartanLlama
+//   `tl::expected` when CMDLINE_USE_TL_EXPECTED is defined or `<expected>` is
+//   unavailable. `CmdlineError` stores structured details and a value location.
+//   Use `cmdline_error_message(error)` for a short message, or
 //   `format_cmdline_error(...)` for the full context diagnostic.
 //
 //   If help was requested, the result succeeds and `opt<"--help">()`,
@@ -268,7 +269,7 @@ namespace cmd {
 //           using type = int;
 //           static constexpr std::string_view name = "integer";
 //
-//           static std::expected<type, TypeConversionError> parse(
+//           static cmd::Expected<type, cmd::TypeConversionError> parse(
 //               std::string_view text) {
 //               ...
 //           }
@@ -278,7 +279,7 @@ namespace cmd {
 //   `<input:path>` or `--count=<integer>`. `type` is the C++ type returned by
 //   `arg<"name">()` or `opt<"--option">()`. `parse` converts raw command-line
 //   text, default text, or environment text into that C++ type. Returning
-//   `std::unexpected(TypeConversionError{"..."})` reports a parse failure.
+//   `cmd::Unexpected(cmd::TypeConversionError{"..."})` reports a parse failure.
 //
 //   Types are passed through one or more `TypeList`s:
 //
@@ -456,15 +457,14 @@ auto try_parse_cmdline(
     int argc, const char* const argv[], std::span<const UsageFace> faces = {}) {
     constexpr auto spec = checked_spec<kSpec>();
     if constexpr (!spec.valid) {
-        return std::expected<detail::InvalidCmdline, CmdlineError>(
+        return Expected<detail::InvalidCmdline, CmdlineError>(
             detail::InvalidCmdline{});
     } else {
         using Spec = TypedSpec<spec, Lists...>;
         using Type = detail::Cmdline<Spec>;
         static_assert(Spec::defaults_valid);
         if (detail::argv_requests_help(argc, argv)) {
-            return std::expected<Type, CmdlineError>(
-                Type::help(argc, argv, faces));
+            return Expected<Type, CmdlineError>(Type::help(argc, argv, faces));
         }
 
         return Type::parse(argc, argv, faces);
@@ -482,10 +482,9 @@ auto parse_cmdline(
         using Spec = TypedSpec<spec, Lists...>;
         using Type = detail::Cmdline<Spec>;
         static_assert(Spec::defaults_valid);
-        std::expected<Type, CmdlineError> runtime =
+        Expected<Type, CmdlineError> runtime =
             detail::argv_requests_help(argc, argv)
-                ? std::expected<Type, CmdlineError>(
-                      Type::help(argc, argv, faces))
+                ? Expected<Type, CmdlineError>(Type::help(argc, argv, faces))
                 : Type::parse(argc, argv, faces);
 
         if (runtime && runtime->help_requested()) {

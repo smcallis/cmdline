@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstddef>
-#include <expected>
 #include <string_view>
 
 #include "cmdline_error.h"
@@ -23,10 +22,10 @@ namespace cmd {
 
 // Represents either a parsed value or the first error that blocked parsing.
 template <typename Value>
-using ParseResult = std::expected<Value, ParseError>;
+using ParseResult = Expected<Value, ParseError>;
 
 // Represents status for a parse operation that doesn't return a value.
-using ParseStatus = std::expected<void, ParseError>;
+using ParseStatus = Expected<void, ParseError>;
 
 // Describes one positional argument parsed from the spec.
 struct ArgSpec {
@@ -232,7 +231,7 @@ struct SpecCursor {
             return {};
         }
 
-        return std::unexpected(error(type));
+        return Unexpected(error(type));
     }
 
     // Consumes horizontal whitespace.
@@ -281,21 +280,21 @@ template <size_t N, size_t M>
 constexpr ParseResult<TextRange> parse_identifier(
     SpecCursor<N, M>& cursor, ParseError::Type type) {
     if (!is_identifier_head(cursor.peek())) {
-        return std::unexpected(cursor.error(type));
+        return Unexpected(cursor.error(type));
     }
 
     const char* first = cursor.pos;
     ++cursor.pos;
     while (is_identifier_tail(cursor.peek())) {
         if (cursor.peek() == '-' && cursor.peek(1) == '-') {
-            return std::unexpected(cursor.error_at(
+            return Unexpected(cursor.error_at(
                 cursor.pos + 1, ParseError::kNameContainsConsecutiveDash));
         }
         ++cursor.pos;
     }
 
     if (*(cursor.pos - 1) == '-') {
-        return std::unexpected(
+        return Unexpected(
             cursor.error_at(cursor.pos - 1, ParseError::kNameEndsWithDash));
     }
     return cursor.range(first, cursor.pos);
@@ -315,20 +314,20 @@ constexpr ParseStatus check_choice_values(
 
         // Two separators in a row, e.g. || is an error.
         if (offset == next) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, TextRange{choices.begin + static_cast<int>(offset), 0},
                 ParseError::kEmptyChoiceValue));
         }
 
         if (!is_identifier_head(text[offset])) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, TextRange{choices.begin + static_cast<int>(offset), 0},
                 ParseError::kInvalidChoiceValue));
         }
 
         for (size_t i = offset + 1; i < next; ++i) {
             if (!is_identifier_tail(text[i])) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     spec, TextRange{choices.begin + static_cast<int>(i), 0},
                     ParseError::kInvalidChoiceValue));
             }
@@ -350,19 +349,19 @@ constexpr ParseResult<ArgSpec> parse_arg_line(
     SpecCursor<N, M> cursor = make_cursor(spec, line);
 
     if (auto status = cursor.expect('<', ParseError::kExpectedLess); !status) {
-        return std::unexpected(status.error());
+        return Unexpected(status.error());
     }
 
     auto name = parse_identifier(cursor, ParseError::kExpectedArgumentName);
     if (!name) {
-        return std::unexpected(name.error());
+        return Unexpected(name.error());
     }
 
     TextRange type;
     if (cursor.accept(':')) {
         auto parsed = parse_identifier(cursor, ParseError::kExpectedTypeName);
         if (!parsed) {
-            return std::unexpected(parsed.error());
+            return Unexpected(parsed.error());
         }
 
         type = *parsed;
@@ -370,7 +369,7 @@ constexpr ParseResult<ArgSpec> parse_arg_line(
 
     if (auto status = cursor.expect('>', ParseError::kExpectedValueClose);
         !status) {
-        return std::unexpected(status.error());
+        return Unexpected(status.error());
     }
 
     bool variadic = false;
@@ -385,8 +384,7 @@ constexpr ParseResult<ArgSpec> parse_arg_line(
     }
 
     if (is_oneof(cursor.peek(), "+*?")) {
-        return std::unexpected(
-            cursor.error(ParseError::kDuplicateRepeatMarker));
+        return Unexpected(cursor.error(ParseError::kDuplicateRepeatMarker));
     }
 
     return ArgSpec{
@@ -414,13 +412,13 @@ constexpr ParseStatus parse_value_spec(
     if (cursor.accept('<')) {
         auto type = parse_identifier(cursor, ParseError::kExpectedTypeName);
         if (!type) {
-            return std::unexpected(type.error());
+            return Unexpected(type.error());
         }
 
         ParseStatus closed =
             cursor.expect('>', ParseError::kExpectedValueClose);
         if (!closed) {
-            return std::unexpected(closed.error());
+            return Unexpected(closed.error());
         }
 
         option.value_type = ValueType::kType;
@@ -434,7 +432,7 @@ constexpr ParseStatus parse_value_spec(
         TextRange choices       = cursor.take_until("]");
 
         if (cursor.done()) {
-            return std::unexpected(
+            return Unexpected(
                 cursor.error_at(value_begin, ParseError::kExpectedChoiceClose));
         }
 
@@ -442,14 +440,14 @@ constexpr ParseStatus parse_value_spec(
         option.choices      = choices;
         ParseStatus checked = check_choice_values(cursor.spec, option.choices);
         if (!checked) {
-            return std::unexpected(checked.error());
+            return Unexpected(checked.error());
         }
 
         cursor.accept(']');
         return {};
     }
 
-    return std::unexpected(cursor.error(ParseError::kExpectedTypeOrChoices));
+    return Unexpected(cursor.error(ParseError::kExpectedTypeOrChoices));
 }
 
 // Parses recognized trailing option tags and applies them to one option.
@@ -482,7 +480,7 @@ struct TagParser {
         TextRange raw, const char* value_begin) const {
         TextRange value = raw.trimmed(spec.source);
         if (value.empty()) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, value_begin, ParseError::kEmptyDefaultValue));
         }
 
@@ -491,12 +489,12 @@ struct TagParser {
             text.size() >= 2 && text.front() == '"' && text.back() == '"';
         if (text.front() == '"' || text.back() == '"') {
             if (!quoted) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     spec, value, ParseError::kMisquotedDefaultValue));
             }
 
             if (value.size == 2) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     spec, TextRange{value.begin + 1, 0},
                     ParseError::kEmptyDefaultValue));
             }
@@ -506,7 +504,7 @@ struct TagParser {
         }
 
         if (const char* space = first_horizontal_space(value)) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, space, ParseError::kMisquotedDefaultValue));
         }
         return value;
@@ -518,13 +516,13 @@ struct TagParser {
         ++cursor.pos;
         while (cursor.peek() != '\0' && cursor.peek() != '"') {
             if (cursor.peek() == ']') {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     spec, first, ParseError::kMisquotedDefaultValue));
             }
 
             if (cursor.peek() == '\\') {
                 if (cursor.peek(1) != '"' && cursor.peek(1) != '\\') {
-                    return std::unexpected(
+                    return Unexpected(
                         cursor.error(ParseError::kMisquotedDefaultValue));
                 }
 
@@ -536,15 +534,14 @@ struct TagParser {
         }
 
         if (!cursor.accept('"')) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, first, ParseError::kMisquotedDefaultValue));
         }
 
         const char* last = cursor.pos;
         cursor.skip_horizontal_space();
         if (cursor.peek() != ']') {
-            return std::unexpected(
-                cursor.error(ParseError::kExpectedChoiceClose));
+            return Unexpected(cursor.error(ParseError::kExpectedChoiceClose));
         }
 
         return TextRange::From(spec.source.data(), first, last);
@@ -558,7 +555,7 @@ struct TagParser {
         if (quoted) {
             ParseResult<TextRange> parsed = parse_quoted_default_range();
             if (!parsed) {
-                return std::unexpected(parsed.error());
+                return Unexpected(parsed.error());
             }
             value = *parsed;
         } else {
@@ -567,7 +564,7 @@ struct TagParser {
 
         ParseResult<TextRange> parsed = parse_default_value(value, value_begin);
         if (!parsed) {
-            return std::unexpected(parsed.error());
+            return Unexpected(parsed.error());
         }
         return DefaultValue{*parsed, quoted};
     }
@@ -576,25 +573,25 @@ struct TagParser {
     constexpr ParseResult<TextRange> parse_env_value(
         TextRange value, const char* value_begin) const {
         if (trim(value.view(spec.source)).empty()) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, value_begin, ParseError::kEmptyEnvName));
         }
 
         if (const char* space = first_horizontal_space(value)) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, space, ParseError::kInvalidEnvName));
         }
 
         std::string_view text = value.view(spec.source);
         if (!is_env_name_head(text.front())) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, TextRange{value.begin, 0}, ParseError::kInvalidEnvName));
         }
 
         std::string_view tail = value.view(spec.source, 1);
         for (size_t i = 0; i < tail.size(); ++i) {
             if (!is_env_name_tail(tail[i])) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     spec, TextRange{value.begin + 1 + static_cast<int>(i), 0},
                     ParseError::kInvalidEnvName));
             }
@@ -606,7 +603,7 @@ struct TagParser {
     constexpr ParseStatus apply_default_tag(
         DefaultValue value, const char* key_begin) const {
         if (option.default_value) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, key_begin, ParseError::kDuplicateTag));
         }
 
@@ -621,13 +618,13 @@ struct TagParser {
         const char* value_begin) const {
         if (key == "env") {
             if (option.env_name) {
-                return std::unexpected(
+                return Unexpected(
                     make_error(spec, key_begin, ParseError::kDuplicateTag));
             }
 
             ParseResult<TextRange> parsed = parse_env_value(value, value_begin);
             if (!parsed) {
-                return std::unexpected(parsed.error());
+                return Unexpected(parsed.error());
             }
 
             option.env_name = *parsed;
@@ -642,7 +639,7 @@ struct TagParser {
         std::string_view key, const char* key_begin) const {
         if (key == "required") {
             if (option.required) {
-                return std::unexpected(
+                return Unexpected(
                     make_error(spec, key_begin, ParseError::kDuplicateTag));
             }
             option.required = true;
@@ -651,7 +648,7 @@ struct TagParser {
 
         if (key == "hidden") {
             if (option.hidden) {
-                return std::unexpected(
+                return Unexpected(
                     make_error(spec, key_begin, ParseError::kDuplicateTag));
             }
             option.hidden = true;
@@ -668,7 +665,7 @@ struct TagParser {
 
         std::string_view key(key_begin, cursor.pos - key_begin);
         if (key == "alias") {
-            return std::unexpected(
+            return Unexpected(
                 cursor.error_at(key_begin, ParseError::kUnsupportedAlias));
         }
 
@@ -679,47 +676,47 @@ struct TagParser {
             if (key == "default") {
                 auto value = parse_default_tag_value(value_begin);
                 if (!value) {
-                    return std::unexpected(value.error());
+                    return Unexpected(value.error());
                 }
 
                 ParseStatus applied = apply_default_tag(*value, key_begin);
                 if (!applied) {
-                    return std::unexpected(applied.error());
+                    return Unexpected(applied.error());
                 }
 
             } else {
                 TextRange value = cursor.take_until("]");
                 if (cursor.done()) {
-                    return std::unexpected(cursor.error_at(
+                    return Unexpected(cursor.error_at(
                         value_begin, ParseError::kExpectedChoiceClose));
                 }
 
                 auto applied =
                     apply_value_tag(key, value, key_begin, value_begin);
                 if (!applied) {
-                    return std::unexpected(applied.error());
+                    return Unexpected(applied.error());
                 }
 
                 if (!*applied) {
-                    return std::unexpected(make_error(
+                    return Unexpected(make_error(
                         spec, key_begin, ParseError::kUnknownOptionTag));
                 }
             }
 
         } else {
             if (cursor.peek() != ']') {
-                return std::unexpected(
+                return Unexpected(
                     cursor.error(ParseError::kExpectedChoiceClose));
             }
 
             auto applied = apply_flag_tag(key, key_begin);
 
             if (!applied) {
-                return std::unexpected(applied.error());
+                return Unexpected(applied.error());
             }
 
             if (!*applied) {
-                return std::unexpected(
+                return Unexpected(
                     make_error(spec, key_begin, ParseError::kUnknownOptionTag));
             }
         }
@@ -727,7 +724,7 @@ struct TagParser {
         ParseStatus closed =
             cursor.expect(']', ParseError::kExpectedChoiceClose);
         if (!closed) {
-            return std::unexpected(closed.error());
+            return Unexpected(closed.error());
         }
         return key_begin;
     }
@@ -770,7 +767,7 @@ constexpr ParseStatus parse_tags(
 
         if (!cursor.accept('[')) {
             if (seen_tag) {
-                return std::unexpected(
+                return Unexpected(
                     cursor.error(ParseError::kTextAfterOptionTag));
             }
 
@@ -780,7 +777,7 @@ constexpr ParseStatus parse_tags(
 
         ParseResult<const char*> parsed_tag = parser.parse_tag();
         if (!parsed_tag) {
-            return std::unexpected(parsed_tag.error());
+            return Unexpected(parsed_tag.error());
         }
 
         // The description stops just before the first recognized trailing tag.
@@ -812,7 +809,7 @@ constexpr ParseResult<OptSpec> parse_opt_line(
     // Validates that the parsed name is followed by a legal tail token.
     const auto expect_tail_delimiter = [&]() -> ParseStatus {
         if (!is_tail_delimiter(cursor.peek())) {
-            return std::unexpected(
+            return Unexpected(
                 cursor.error(ParseError::kExpectedOptionDelimiter));
         }
         return {};
@@ -823,7 +820,7 @@ constexpr ParseResult<OptSpec> parse_opt_line(
         if (cursor.peek() != '-' || !is_identifier_head(cursor.peek(1))) {
             const char* where =
                 cursor.peek() == '-' ? cursor.pos + 1 : cursor.pos;
-            return std::unexpected(
+            return Unexpected(
                 cursor.error_at(where, ParseError::kExpectedShortOption));
         }
 
@@ -835,17 +832,17 @@ constexpr ParseResult<OptSpec> parse_opt_line(
     // Parses a long option name and an optional '/-s' short name.
     const auto parse_long = [&]() -> ParseStatus {
         if (!cursor.accept("--")) {
-            return std::unexpected(cursor.error(ParseError::kExpectedOption));
+            return Unexpected(cursor.error(ParseError::kExpectedOption));
         }
 
         const char* name_begin = cursor.pos;
         auto name = parse_identifier(cursor, ParseError::kExpectedOptionName);
         if (!name) {
-            return std::unexpected(name.error());
+            return Unexpected(name.error());
         }
 
         if (name->size < 2) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, name_begin, ParseError::kLongOptionNameTooShort));
         }
 
@@ -867,7 +864,7 @@ constexpr ParseResult<OptSpec> parse_opt_line(
             return parse_short();
         }
 
-        return std::unexpected(cursor.error(ParseError::kExpectedOption));
+        return Unexpected(cursor.error(ParseError::kExpectedOption));
     };
 
     // Parses the optional value grammar after the option names.
@@ -887,7 +884,7 @@ constexpr ParseResult<OptSpec> parse_opt_line(
         }
 
         if (is_oneof(cursor.peek(), "+<>")) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, cursor.pos, ParseError::kDuplicateRepeatMarker));
         }
 
@@ -904,7 +901,7 @@ constexpr ParseResult<OptSpec> parse_opt_line(
                              .and_then(parse_repeat)
                              .and_then(parse_description);
     if (!parsed) {
-        return std::unexpected(parsed.error());
+        return Unexpected(parsed.error());
     }
     return option;
 }
@@ -925,7 +922,7 @@ constexpr ParseResult<ParsedSpec<N, M>> parse_spec() {
                               LineType type, TextRange text, size_t index = 0,
                               size_t line_indent = 0) -> ParseStatus {
         if (spec.nline >= N) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, text, ParseError::kTooManyLines));
         }
 
@@ -943,7 +940,7 @@ constexpr ParseResult<ParsedSpec<N, M>> parse_spec() {
     const auto add_arg =
         [&spec](std::string_view line, ArgSpec arg) -> ParseResult<size_t> {
         if (spec.narg >= N) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, TextRange::From(spec.source, line),
                 ParseError::kTooManyArguments));
         }
@@ -957,7 +954,7 @@ constexpr ParseResult<ParsedSpec<N, M>> parse_spec() {
     const auto add_opt =
         [&spec](std::string_view line, OptSpec option) -> ParseResult<size_t> {
         if (spec.nopt >= N) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, TextRange::From(spec.source, line),
                 ParseError::kTooManyOptions));
         }
@@ -990,7 +987,7 @@ constexpr ParseResult<ParsedSpec<N, M>> parse_spec() {
             if (auto status = add_line(
                     LineType::kBlank, TextRange{static_cast<int>(offset), 0});
                 !status) {
-                return std::unexpected(status.error());
+                return Unexpected(status.error());
             }
 
         } else if (line_body.front() == '_') {
@@ -999,48 +996,48 @@ constexpr ParseResult<ParsedSpec<N, M>> parse_spec() {
             if (auto status = add_line(
                     LineType::kHeading, range(line_body), 0, line_indent);
                 !status) {
-                return std::unexpected(status.error());
+                return Unexpected(status.error());
             }
 
         } else if (line_body.front() == '<') {
             auto parsed = parse_arg_line(spec, line_body);
             if (!parsed) {
-                return std::unexpected(parsed.error());
+                return Unexpected(parsed.error());
             }
 
             auto index = add_arg(line_body, *parsed);
             if (!index) {
-                return std::unexpected(index.error());
+                return Unexpected(index.error());
             }
 
             ParseStatus status =
                 add_line(LineType::kArg, range(line_body), *index, line_indent);
             if (!status) {
-                return std::unexpected(status.error());
+                return Unexpected(status.error());
             }
 
         } else if (line_body.front() == '-') {
             auto parsed = parse_opt_line(spec, line_body);
             if (!parsed) {
-                return std::unexpected(parsed.error());
+                return Unexpected(parsed.error());
             }
 
             auto index = add_opt(line_body, *parsed);
             if (!index) {
-                return std::unexpected(index.error());
+                return Unexpected(index.error());
             }
 
             ParseStatus status = add_line(
                 LineType::kOption, range(line_body), *index, line_indent);
             if (!status) {
-                return std::unexpected(status.error());
+                return Unexpected(status.error());
             }
 
         } else {
             if (auto status = add_line(
                     LineType::kRawText, range(line_body), 0, line_indent);
                 !status) {
-                return std::unexpected(status.error());
+                return Unexpected(status.error());
             }
         }
 

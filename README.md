@@ -106,7 +106,9 @@ target_link_libraries(my_tool PRIVATE cmdline)
 
 `cmdline` expects `{fmt}` to be available as a CMake package. On Debian and
 Ubuntu, install `libfmt-dev`. Tests also need `libgtest-dev`. If you integrate
-the header manually, compile as C++23 or C++26 and link `{fmt}`.
+the header manually, compile as C++23 or C++26 and link `{fmt}`. If your
+standard library does not provide `<expected>`, put TartanLlama `expected.hpp`
+next to `cmdline.h`.
 
 ## The Spec
 
@@ -258,8 +260,11 @@ when either happens. It calls `std::exit(EXIT_SUCCESS)` after printing help and
 `std::terminate`.
 
 `try_parse_cmdline<spec>(argc, argv)` returns
-`std::expected<cmdline, CmdlineError>` instead. Use it when the caller should
-decide how to handle errors or help.
+`cmd::Expected<cmdline, CmdlineError>` instead. By default that aliases
+`std::expected`. Define `CMDLINE_USE_TL_EXPECTED` before including `cmdline.h`
+to force the TartanLlama expected polyfill, or let cmdline use it
+automatically when `<expected>` is unavailable. The polyfill header should be
+available as `expected.hpp` or `tl/expected.hpp` next to `cmdline.h`.
 
 ```cpp
 auto cmdline = cmd::try_parse_cmdline<R"(
@@ -326,14 +331,14 @@ struct PortType {
 
     static constexpr std::string_view name = "port";
 
-    static constexpr std::expected<type, cmd::TypeConversionError> parse(
+    static constexpr cmd::Expected<type, cmd::TypeConversionError> parse(
         std::string_view text) {
         int value{};
         auto result =
             std::from_chars(text.data(), text.data() + text.size(), value);
         if (result.ec != std::errc{} ||
             result.ptr != text.data() + text.size()) {
-            return std::unexpected(cmd::TypeConversionError("invalid port"));
+            return cmd::Unexpected(cmd::TypeConversionError("invalid port"));
         }
         return value;
     }
@@ -410,7 +415,6 @@ This is useful for project-wide preludes or shared option blocks.
 ```cpp
 #include <charconv>
 #include <cstdint>
-#include <expected>
 #include <span>
 #include <string>
 #include <string_view>
@@ -426,14 +430,15 @@ struct JobIdType {
 
     static constexpr std::string_view name = "job-id";
 
-    static constexpr std::expected<type, cmd::TypeConversionError> parse(
+    static constexpr cmd::Expected<type, cmd::TypeConversionError> parse(
         std::string_view text) {
         type value{};
         auto result =
             std::from_chars(text.data(), text.data() + text.size(), value);
         if (result.ec != std::errc{} ||
             result.ptr != text.data() + text.size()) {
-            return std::unexpected(cmd::TypeConversionError("invalid job id"));
+            return cmd::Unexpected(
+                cmd::TypeConversionError("invalid job id"));
         }
         return value;
     }

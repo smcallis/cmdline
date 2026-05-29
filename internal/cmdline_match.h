@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include <expected>
 #include <optional>
 #include <span>
 #include <string>
@@ -106,7 +105,7 @@ inline std::string option_value_context(
 // Checks one retained option value against its explicit choice list. Options
 // without choices always pass. Failures preserve the value location so runtime
 // diagnostics can point at argv, defaults, or environment context.
-inline std::expected<void, CmdlineError> check_option_choice(
+inline Expected<void, CmdlineError> check_option_choice(
     const Option& option, std::string_view value,
     const ValueLocation& location) {
     if (option.choices.empty() ||
@@ -114,7 +113,7 @@ inline std::expected<void, CmdlineError> check_option_choice(
         return {};
     }
 
-    return std::unexpected(
+    return Unexpected(
         CmdlineError{
             .code = ErrorCode::kBadArgument,
             .info = choice_info(
@@ -276,20 +275,20 @@ class Cmdline {
 
     // Parses `argv` using a type-resolved spec checked at compile time. The
     // result owns both the printable spec model and the typed accessor values.
-    static std::expected<Cmdline, CmdlineError> parse(
+    static Expected<Cmdline, CmdlineError> parse(
         int argc, const char* const argv[],
         std::span<const UsageFace> faces = {}) {
         Cmdline cmdline(program_name(argc, argv), faces);
 
-        std::expected<void, CmdlineError> result = cmdline.process(argc, argv);
+        Expected<void, CmdlineError> result = cmdline.process(argc, argv);
         if (!result) {
-            return std::unexpected(result.error());
+            return Unexpected(result.error());
         }
 
         if (!cmdline.help_requested()) {
             result = cmdline.materialize();
             if (!result) {
-                return std::unexpected(result.error());
+                return Unexpected(result.error());
             }
         }
         return cmdline;
@@ -356,26 +355,25 @@ class Cmdline {
 
     // Parses the recorded values for one option using the resolved value type.
     template <SpecType Type>
-    std::expected<std::vector<typename Type::type>, CmdlineError>
+    Expected<std::vector<typename Type::type>, CmdlineError>
     parse_option_values(const Option& option, const RawOpt& raw);
 
     // Materializes one positional argument data value from raw argv values.
     template <size_t kIndex>
-    std::expected<ArgData<kIndex>, CmdlineError> parse_arg_data() const;
+    Expected<ArgData<kIndex>, CmdlineError> parse_arg_data() const;
 
     // Materializes one option data value from raw argv values and fallbacks.
     template <size_t kIndex>
-    std::expected<OptData<kIndex>, CmdlineError> parse_opt_data();
+    Expected<OptData<kIndex>, CmdlineError> parse_opt_data();
 
     // Materializes every positional argument into data slots.
     template <size_t kIndex = 0, typename... Values>
-    std::expected<ArgDataTuple, CmdlineError> parse_arg_data_all(
+    Expected<ArgDataTuple, CmdlineError> parse_arg_data_all(
         Values&&... values) const;
 
     // Materializes every option into data slots.
     template <size_t kIndex = 0, typename... Values>
-    std::expected<OptDataTuple, CmdlineError> parse_opt_data_all(
-        Values&&... values);
+    Expected<OptDataTuple, CmdlineError> parse_opt_data_all(Values&&... values);
 
     // Returns the originating program name from argv.
     static std::string program_name(int argc, const char* const argv[]) {
@@ -599,10 +597,9 @@ class Cmdline {
 
     // Accepts a rule result and advances argv when the rule matched. Rules
     // describe what happened, while this helper owns cursor movement.
-    std::expected<bool, CmdlineError> accept(
-        std::expected<Step, CmdlineError> step) {
+    Expected<bool, CmdlineError> accept(Expected<Step, CmdlineError> step) {
         if (!step) {
-            return std::unexpected(step.error());
+            return Unexpected(step.error());
         }
 
         if (!step->matched()) {
@@ -616,15 +613,14 @@ class Cmdline {
     // Expects a rule result to match and advances argv after success. This is
     // used for the fallback positional path where failure means the token was
     // not recognized by any rule.
-    std::expected<void, CmdlineError> expect(
-        std::expected<Step, CmdlineError> step) {
-        std::expected<bool, CmdlineError> matched = accept(std::move(step));
+    Expected<void, CmdlineError> expect(Expected<Step, CmdlineError> step) {
+        Expected<bool, CmdlineError> matched = accept(std::move(step));
         if (!matched) {
-            return std::unexpected(matched.error());
+            return Unexpected(matched.error());
         }
 
         if (!*matched) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 ErrorCode::kBadArgument,
                 value_info(CmdlineErrorType::kUnexpectedArgument, _argv.peek()),
                 _argv.location()));
@@ -633,7 +629,7 @@ class Cmdline {
     }
 
     // Matches the `--` option terminator.
-    std::expected<Step, CmdlineError> stop_token() {
+    Expected<Step, CmdlineError> stop_token() {
         if (!_positional_only && _argv.peek() == "--") {
             _positional_only = true;
             return Step::consumed_tokens(1);
@@ -643,7 +639,7 @@ class Cmdline {
 
     // Matches an option or short-switch block at the current token. A bare "-"
     // is positional, and "--" is handled by stop_token() before this rule.
-    std::expected<Step, CmdlineError> option_token() {
+    Expected<Step, CmdlineError> option_token() {
         std::string_view token = _argv.peek();
         if (_positional_only || token == "-" || !token.starts_with("-")) {
             return Step::no_match();
@@ -656,11 +652,10 @@ class Cmdline {
     }
 
     // Matches a positional argument at the current token.
-    std::expected<Step, CmdlineError> argument_token() {
-        std::expected<void, CmdlineError> result =
-            consume_positional(_argv.peek());
+    Expected<Step, CmdlineError> argument_token() {
+        Expected<void, CmdlineError> result = consume_positional(_argv.peek());
         if (!result) {
-            return std::unexpected(result.error());
+            return Unexpected(result.error());
         }
         return Step::consumed_tokens(1);
     }
@@ -687,7 +682,7 @@ class Cmdline {
     }
 
     // Consumes one token as a block of single-letter switches.
-    std::expected<Step, CmdlineError> consume_short_switch_block(
+    Expected<Step, CmdlineError> consume_short_switch_block(
         std::string_view token) {
         for (size_t pos = 1; pos < token.size(); ++pos) {
             if (is_help_short_name(token[pos])) {
@@ -698,7 +693,7 @@ class Cmdline {
             std::string short_token     = short_option_token(token[pos]);
             std::optional<size_t> index = find_option_index(short_token);
             if (!index) {
-                return std::unexpected(  //
+                return Unexpected(  //
                     make_error(
                         ErrorCode::kUnknown,
                         subject_info(
@@ -708,10 +703,10 @@ class Cmdline {
 
             const Option& option = _opts[*index];
             RawOpt& raw          = _raw.opts[*index];
-            std::expected<void, CmdlineError> result =
+            Expected<void, CmdlineError> result =
                 set_switch(option, raw, true, _argv.location_at(pos));
             if (!result) {
-                return std::unexpected(result.error());
+                return Unexpected(result.error());
             }
         }
         return Step::consumed_tokens(1);
@@ -721,7 +716,7 @@ class Cmdline {
     // short value options support both a following token and the explicit
     // "=value" form, while attached short values such as -ovalue are rejected
     // elsewhere.
-    std::expected<Step, CmdlineError> consume_option(std::string_view token) {
+    Expected<Step, CmdlineError> consume_option(std::string_view token) {
         std::string option_token(token);
         std::optional<std::string> inline_value;
         size_t equals = option_token.find('=');
@@ -733,7 +728,7 @@ class Cmdline {
         std::optional<size_t> index = find_option_index(option_token);
         if (!index && is_help_token(option_token)) {
             if (inline_value) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     ErrorCode::kBadArgument,
                     subject_info(
                         CmdlineErrorType::kNoValueAllowed, option_token),
@@ -744,7 +739,7 @@ class Cmdline {
         }
 
         if (!index) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 ErrorCode::kUnknown,
                 subject_info(CmdlineErrorType::kUnknownOption, token),
                 _argv.location()));
@@ -761,21 +756,21 @@ class Cmdline {
     }
 
     // Consumes one option token that does not take a value.
-    std::expected<Step, CmdlineError> consume_switch_option(
+    Expected<Step, CmdlineError> consume_switch_option(
         const Option& option, RawOpt& raw, std::string_view option_token,
         const std::optional<std::string>& inline_value) {
         if (inline_value) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 ErrorCode::kBadArgument,
                 subject_info(CmdlineErrorType::kNoValueAllowed, option_token),
                 _argv.location_at(option_token.size())));
         }
 
         bool enabled = !option_token.starts_with("--no-");
-        std::expected<void, CmdlineError> result =
+        Expected<void, CmdlineError> result =
             set_switch(option, raw, enabled, _argv.location());
         if (!result) {
-            return std::unexpected(result.error());
+            return Unexpected(result.error());
         }
         return Step::consumed_tokens(1);
     }
@@ -783,7 +778,7 @@ class Cmdline {
     // Consumes one option token that takes a value. If no inline value is
     // present the next argv token is consumed greedily, even when that token is
     // dash-prefixed or exactly "--".
-    std::expected<Step, CmdlineError> consume_value_option(
+    Expected<Step, CmdlineError> consume_value_option(
         const Option& option, RawOpt& raw, std::string_view option_token,
         const std::optional<std::string>& inline_value, size_t equals) {
         std::string value;
@@ -795,7 +790,7 @@ class Cmdline {
 
         } else {
             if (!_argv.has(1)) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     ErrorCode::kIncomplete,
                     subject_info(
                         CmdlineErrorType::kValueRequired, option_token),
@@ -807,10 +802,10 @@ class Cmdline {
             skip           = 2;
         }
 
-        std::expected<void, CmdlineError> result =
+        Expected<void, CmdlineError> result =
             set_value(option, raw, value, value_location);
         if (!result) {
-            return std::unexpected(result.error());
+            return Unexpected(result.error());
         }
         return Step::consumed_tokens(skip);
     }
@@ -818,8 +813,7 @@ class Cmdline {
     // Consumes one positional argument token. Scalar positionals advance the
     // current argument index, while a final variadic positional keeps accepting
     // remaining values.
-    std::expected<void, CmdlineError> consume_positional(
-        std::string_view token) {
+    Expected<void, CmdlineError> consume_positional(std::string_view token) {
         const std::vector<PosArg>& args = _args;
         if (_arg_index >= args.size()) {
             if (!args.empty() && args.back().accepts_many) {
@@ -829,7 +823,7 @@ class Cmdline {
                 return {};
             }
 
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 ErrorCode::kOverflow,
                 value_info(CmdlineErrorType::kUnexpectedPositional, token),
                 _argv.location()));
@@ -847,7 +841,7 @@ class Cmdline {
 
     // Records a switch occurrence. Count switches accumulate, first/last
     // switches apply repeat policy, and ordinary switches reject repeats.
-    std::expected<void, CmdlineError> set_switch(
+    Expected<void, CmdlineError> set_switch(
         const Option& option, RawOpt& raw, bool enabled,
         const ValueLocation& location) {
         if (option.count_occurrences) {
@@ -858,7 +852,7 @@ class Cmdline {
         }
 
         if (option.repeat == RepeatPolicy::kError && raw.count != 0) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 ErrorCode::kAlreadySet,
                 subject_info(
                     CmdlineErrorType::kRepeatedOption, option.full_name()),
@@ -879,11 +873,11 @@ class Cmdline {
     // Records one option value. Only retained values are type-checked later, so
     // ignored first/last repeats can safely contain values invalid for the
     // type.
-    std::expected<void, CmdlineError> set_value(
+    Expected<void, CmdlineError> set_value(
         const Option& option, RawOpt& raw, std::string value,
         ValueLocation location) {
         if (option.repeat == RepeatPolicy::kError && raw.is_set) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 ErrorCode::kAlreadySet,
                 subject_info(
                     CmdlineErrorType::kRepeatedOption, option.full_name()),
@@ -916,7 +910,7 @@ class Cmdline {
     // Checks retained argv option values against explicit choice lists before
     // materialization. Environment and default values are checked later when
     // they are selected as fallbacks.
-    std::expected<void, CmdlineError> validate_choices() const {
+    Expected<void, CmdlineError> validate_choices() const {
         for (size_t opt = 0; opt < _opts.size(); ++opt) {
             const Option& option = _opts[opt];
             const RawOpt& raw    = _raw.opts[opt];
@@ -926,10 +920,10 @@ class Cmdline {
                     location = raw.value_locations[i];
                 }
 
-                std::expected<void, CmdlineError> choice =
+                Expected<void, CmdlineError> choice =
                     check_option_choice(option, raw.values[i], location);
                 if (!choice) {
-                    return std::unexpected(choice.error());
+                    return Unexpected(choice.error());
                 }
             }
         }
@@ -938,10 +932,10 @@ class Cmdline {
 
     // Checks final retained argv parse state before typed materialization. Help
     // is an escape hatch, so missing required values do not block usage output.
-    std::expected<void, CmdlineError> finish(int argc) {
-        std::expected<void, CmdlineError> choices = validate_choices();
+    Expected<void, CmdlineError> finish(int argc) {
+        Expected<void, CmdlineError> choices = validate_choices();
         if (!choices) {
-            return std::unexpected(choices.error());
+            return Unexpected(choices.error());
         }
 
         if (_raw.help_requested) {
@@ -952,7 +946,7 @@ class Cmdline {
             const PosArg& spec = _args[arg];
             const RawArg& raw  = _raw.args[arg];
             if (spec.required && raw.values.empty()) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     ErrorCode::kUnderflow,
                     subject_info(CmdlineErrorType::kMissingArgument, spec.name),
                     argc));
@@ -964,30 +958,29 @@ class Cmdline {
 
     // Consumes argv tokens and records matched argument and option values. The
     // rule order is "--" terminator, option token, then positional token.
-    std::expected<void, CmdlineError> process(
-        int argc, const char* const argv[]) {
+    Expected<void, CmdlineError> process(int argc, const char* const argv[]) {
         _tokens = expand_response_files(argc, argv);
         _argv   = Argv(_tokens);
         while (!_argv.done()) {
-            std::expected<bool, CmdlineError> stopped = accept(stop_token());
+            Expected<bool, CmdlineError> stopped = accept(stop_token());
             if (!stopped) {
-                return std::unexpected(stopped.error());
+                return Unexpected(stopped.error());
             }
             if (*stopped) {
                 continue;
             }
 
-            std::expected<bool, CmdlineError> optioned = accept(option_token());
+            Expected<bool, CmdlineError> optioned = accept(option_token());
             if (!optioned) {
-                return std::unexpected(optioned.error());
+                return Unexpected(optioned.error());
             }
             if (*optioned) {
                 continue;
             }
 
-            std::expected<void, CmdlineError> argued = expect(argument_token());
+            Expected<void, CmdlineError> argued = expect(argument_token());
             if (!argued) {
-                return std::unexpected(argued.error());
+                return Unexpected(argued.error());
             }
         }
         return finish(argc);
@@ -995,7 +988,7 @@ class Cmdline {
 
     // Materializes raw argv state into typed accessor data. This is called only
     // after token matching succeeds and help was not requested.
-    std::expected<void, CmdlineError> materialize();
+    Expected<void, CmdlineError> materialize();
 
     // Runtime copy of the checked spec, stored as owned strings for usage and
     // diagnostics.
@@ -1104,12 +1097,12 @@ inline OwnedOptionValues environment_values(
 
 // Parses one typed value and converts parser failures to CmdlineError.
 template <SpecType Type>
-std::expected<typename Type::type, CmdlineError> parse_typed_value(
+Expected<typename Type::type, CmdlineError> parse_typed_value(
     std::string_view name, std::string_view value,
     const ValueLocation& location) {
     auto parsed = Type::parse(value);
     if (!parsed) {
-        return std::unexpected(make_typed_value_error(
+        return Unexpected(make_typed_value_error(
             name, Type::name, value, location, parsed.error().error_message()));
     }
     return std::move(*parsed);
@@ -1117,16 +1110,16 @@ std::expected<typename Type::type, CmdlineError> parse_typed_value(
 
 // Parses positional values with one selected command-line type.
 template <SpecType Type>
-std::expected<std::vector<typename Type::type>, CmdlineError> parse_arg_values(
+Expected<std::vector<typename Type::type>, CmdlineError> parse_arg_values(
     const PosArg& arg, const RawArg& raw) {
     std::vector<typename Type::type> result;
     result.reserve(raw.values.size());
     for (size_t i = 0; i < raw.values.size(); ++i) {
-        std::expected<typename Type::type, CmdlineError> value =
+        Expected<typename Type::type, CmdlineError> value =
             parse_typed_value<Type>(
                 arg.name, raw.values[i], arg_value_location(raw, i));
         if (!value) {
-            return std::unexpected(value.error());
+            return Unexpected(value.error());
         }
 
         result.push_back(std::move(*value));
@@ -1136,7 +1129,7 @@ std::expected<std::vector<typename Type::type>, CmdlineError> parse_arg_values(
 
 // Parses option values with one selected command-line type.
 template <SpecType Type>
-std::expected<std::vector<typename Type::type>, CmdlineError>
+Expected<std::vector<typename Type::type>, CmdlineError>
 parse_option_value_view(const Option& option, OptionValueView raw) {
     std::vector<typename Type::type> result;
     result.reserve(raw.values.size());
@@ -1147,18 +1140,18 @@ parse_option_value_view(const Option& option, OptionValueView raw) {
         }
 
         if (location.origin != ValueOrigin::kArgv) {
-            std::expected<void, CmdlineError> choice =
+            Expected<void, CmdlineError> choice =
                 check_option_choice(option, raw.values[i], location);
             if (!choice) {
-                return std::unexpected(choice.error());
+                return Unexpected(choice.error());
             }
         }
 
         std::string context = option_value_context(option, location);
-        std::expected<typename Type::type, CmdlineError> value =
+        Expected<typename Type::type, CmdlineError> value =
             parse_typed_value<Type>(context, raw.values[i], location);
         if (!value) {
-            return std::unexpected(value.error());
+            return Unexpected(value.error());
         }
 
         result.push_back(std::move(*value));
@@ -1169,7 +1162,7 @@ parse_option_value_view(const Option& option, OptionValueView raw) {
 // Parses option values and treats invalid environment fallbacks as absent.
 template <typename Spec>
 template <SpecType Type>
-std::expected<std::vector<typename Type::type>, CmdlineError>
+Expected<std::vector<typename Type::type>, CmdlineError>
 Cmdline<Spec>::parse_option_values(
     const Option& option, const RawOpt& option_values) {
     if (option_values.is_set) {
@@ -1180,8 +1173,8 @@ Cmdline<Spec>::parse_option_values(
     if (!option.env_name.empty()) {
         if (const char* value = std::getenv(option.env_name.c_str())) {
             OwnedOptionValues env = environment_values(option, value);
-            std::expected<std::vector<typename Type::type>, CmdlineError>
-                parsed = parse_option_value_view<Type>(option, env.view());
+            Expected<std::vector<typename Type::type>, CmdlineError> parsed =
+                parse_option_value_view<Type>(option, env.view());
             if (parsed) {
                 return parsed;
             }
@@ -1201,7 +1194,7 @@ Cmdline<Spec>::parse_option_values(
 // Parses one positional argument's typed data value.
 template <typename Spec>
 template <size_t kIndex>
-std::expected<typename Cmdline<Spec>::template ArgData<kIndex>, CmdlineError>
+Expected<typename Cmdline<Spec>::template ArgData<kIndex>, CmdlineError>
 Cmdline<Spec>::parse_arg_data() const {
     using Type = typename Spec::template ArgType<kIndex>;
 
@@ -1212,7 +1205,7 @@ Cmdline<Spec>::parse_arg_data() const {
     } else {
         if (raw.values.empty()) {
             if constexpr (Spec::arg_spec(kIndex).required) {
-                return std::unexpected(
+                return Unexpected(
                     CmdlineError{
                         .code = ErrorCode::kUnderflow,
                         .info = subject_info(
@@ -1226,7 +1219,7 @@ Cmdline<Spec>::parse_arg_data() const {
         auto value = parse_typed_value<Type>(
             arg.name, raw.values.front(), arg_value_location(raw, 0));
         if (!value) {
-            return std::unexpected(value.error());
+            return Unexpected(value.error());
         }
 
         if constexpr (Spec::arg_spec(kIndex).required) {
@@ -1240,7 +1233,7 @@ Cmdline<Spec>::parse_arg_data() const {
 // Parses one option or switch's typed data value.
 template <typename Spec>
 template <size_t kIndex>
-std::expected<typename Cmdline<Spec>::template OptData<kIndex>, CmdlineError>
+Expected<typename Cmdline<Spec>::template OptData<kIndex>, CmdlineError>
 Cmdline<Spec>::parse_opt_data() {
     const Option& option   = _opts[kIndex];
     const RawOpt& raw      = _raw.opts[kIndex];
@@ -1255,10 +1248,10 @@ Cmdline<Spec>::parse_opt_data() {
         using Type  = typename Spec::template OptType<kIndex>;
         using Value = typename Spec::template OptValueType<kIndex>;
 
-        std::expected<std::vector<Value>, CmdlineError> values =
+        Expected<std::vector<Value>, CmdlineError> values =
             this->template parse_option_values<Type>(option, raw);
         if (!values) {
-            return std::unexpected(values.error());
+            return Unexpected(values.error());
         }
 
         if constexpr (spec.keeps_all()) {
@@ -1267,7 +1260,7 @@ Cmdline<Spec>::parse_opt_data() {
             if constexpr (spec.is_optional_value()) {
                 return std::optional<Value>{};
             } else {
-                return std::unexpected(
+                return Unexpected(
                     CmdlineError{
                         .code = ErrorCode::kIncomplete,
                         .info = subject_info(
@@ -1294,15 +1287,15 @@ Cmdline<Spec>::parse_opt_data() {
 // default-constructible.
 template <typename Spec>
 template <size_t kIndex, typename... Values>
-std::expected<typename Cmdline<Spec>::ArgDataTuple, CmdlineError>
+Expected<typename Cmdline<Spec>::ArgDataTuple, CmdlineError>
 Cmdline<Spec>::parse_arg_data_all(Values&&... values) const {
     if constexpr (kIndex == Spec::narg) {
         return ArgDataTuple(std::forward<Values>(values)...);
     } else {
-        std::expected<ArgData<kIndex>, CmdlineError> parsed =
+        Expected<ArgData<kIndex>, CmdlineError> parsed =
             this->template parse_arg_data<kIndex>();
         if (!parsed) {
-            return std::unexpected(parsed.error());
+            return Unexpected(parsed.error());
         }
 
         return this->template parse_arg_data_all<kIndex + 1>(
@@ -1315,15 +1308,15 @@ Cmdline<Spec>::parse_arg_data_all(Values&&... values) const {
 // default-constructible.
 template <typename Spec>
 template <size_t kIndex, typename... Values>
-std::expected<typename Cmdline<Spec>::OptDataTuple, CmdlineError>
+Expected<typename Cmdline<Spec>::OptDataTuple, CmdlineError>
 Cmdline<Spec>::parse_opt_data_all(Values&&... values) {
     if constexpr (kIndex == Spec::nopt) {
         return OptDataTuple(std::forward<Values>(values)...);
     } else {
-        std::expected<OptData<kIndex>, CmdlineError> parsed =
+        Expected<OptData<kIndex>, CmdlineError> parsed =
             this->template parse_opt_data<kIndex>();
         if (!parsed) {
-            return std::unexpected(parsed.error());
+            return Unexpected(parsed.error());
         }
 
         return this->template parse_opt_data_all<kIndex + 1>(
@@ -1366,15 +1359,15 @@ bool Cmdline<Spec>::set() const {
 
 // Converts runtime parse state into typed accessor data.
 template <typename Spec>
-std::expected<void, CmdlineError> Cmdline<Spec>::materialize() {
-    std::expected<ArgDataTuple, CmdlineError> args = parse_arg_data_all();
+Expected<void, CmdlineError> Cmdline<Spec>::materialize() {
+    Expected<ArgDataTuple, CmdlineError> args = parse_arg_data_all();
     if (!args) {
-        return std::unexpected(args.error());
+        return Unexpected(args.error());
     }
 
-    std::expected<OptDataTuple, CmdlineError> options = parse_opt_data_all();
+    Expected<OptDataTuple, CmdlineError> options = parse_opt_data_all();
     if (!options) {
-        return std::unexpected(options.error());
+        return Unexpected(options.error());
     }
 
     _arg_data = std::move(*args);

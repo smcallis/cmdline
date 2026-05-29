@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <expected>
 #include <string_view>
 
 #include "cmdline_parse.h"
@@ -49,7 +48,7 @@ constexpr ParseStatus check_choice_default(
     // Returns an OK status if the given value is a valid default value.
     const auto is_valid_default = [&](TextRange value) -> ParseStatus {
         if (!option.choice_allows_value(spec.source, value)) {
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, value, ParseError::kInvalidDefaultValue));
         }
         return {};
@@ -73,7 +72,7 @@ template <size_t N, size_t M>
 constexpr ParseStatus check_variadic_is_last(const ParsedSpec<N, M>& spec) {
     for (size_t i = 1; i < spec.narg; ++i) {
         if (spec.args[i - 1].variadic) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, spec.args[i - 1].name, ParseError::kVariadicArgNotLast));
         }
     }
@@ -85,7 +84,7 @@ template <size_t N, size_t M>
 constexpr ParseStatus check_optional_is_last(const ParsedSpec<N, M>& spec) {
     for (size_t i = 1; i < spec.narg; ++i) {
         if (spec.args[i - 1].optional()) {
-            return std::unexpected(make_error(
+            return Unexpected(make_error(
                 spec, spec.args[i - 1].name, ParseError::kOptionalArgNotLast));
         }
     }
@@ -98,7 +97,7 @@ constexpr ParseStatus check_duplicate_arguments(const ParsedSpec<N, M>& spec) {
     for (size_t i = 0; i < spec.narg; ++i) {
         for (size_t j = i + 1; j < spec.narg; ++j) {
             if (same_text(spec, spec.args[i].name, spec.args[j].name)) {
-                return std::unexpected(make_error(
+                return Unexpected(make_error(
                     spec, spec.args[j].name, ParseError::kDuplicateArg));
             }
         }
@@ -113,19 +112,18 @@ constexpr ParseStatus check_duplicate_option_names(
     if (option_uses_only_help_names(spec, left) &&
         option_uses_only_help_names(spec, right)) {
         TextRange name = right.long_name ? right.long_name : right.short_name;
-        return std::unexpected(
-            make_error(spec, name, ParseError::kDuplicateOpt));
+        return Unexpected(make_error(spec, name, ParseError::kDuplicateOpt));
     }
 
     if (left.long_name && right.long_name &&
         same_text(spec, left.long_name, right.long_name)) {
-        return std::unexpected(
+        return Unexpected(
             make_error(spec, right.long_name, ParseError::kDuplicateOpt));
     }
 
     if (left.short_name && right.short_name &&
         same_text(spec, left.short_name, right.short_name)) {
-        return std::unexpected(
+        return Unexpected(
             make_error(spec, right.short_name, ParseError::kDuplicateOpt));
     }
 
@@ -134,7 +132,7 @@ constexpr ParseStatus check_duplicate_option_names(
           left.negative_form_matches(spec.source, right.long_name)) ||
          (right.has_negative_form() &&
           right.negative_form_matches(spec.source, left.long_name)))) {
-        return std::unexpected(
+        return Unexpected(
             make_error(spec, right.long_name, ParseError::kDuplicateOpt));
     }
     return {};
@@ -149,19 +147,19 @@ constexpr ParseStatus check_value_tags(
     }
 
     if (option.default_value) {
-        return std::unexpected(make_error(
+        return Unexpected(make_error(
             spec, option.default_value, ParseError::kDefaultRequiresValue));
     }
 
     if (option.env_name) {
-        return std::unexpected(
+        return Unexpected(
             make_error(spec, option.env_name, ParseError::kEnvRequiresValue));
     }
 
     if (option.required) {
         TextRange name =
             option.long_name ? option.long_name : option.short_name;
-        return std::unexpected(
+        return Unexpected(
             make_error(spec, name, ParseError::kRequiredRequiresValue));
     }
     return {};
@@ -179,20 +177,20 @@ constexpr ParseStatus check_reserved_help_names(
             option.hidden) {
             TextRange name =
                 option.long_name ? option.long_name : option.short_name;
-            return std::unexpected(
+            return Unexpected(
                 make_error(spec, name, ParseError::kReservedOptionName));
         }
         return {};
     }
 
     if (short_help) {
-        return std::unexpected(make_error(
+        return Unexpected(make_error(
             spec, option.short_name, ParseError::kReservedOptionName));
     }
 
     if (option.long_name &&
         is_reserved_long(option.long_name.view(spec.source))) {
-        return std::unexpected(make_error(
+        return Unexpected(make_error(
             spec, option.long_name, ParseError::kReservedOptionName));
     }
     return {};
@@ -204,12 +202,12 @@ constexpr ParseStatus check_option(
     const ParsedSpec<N, M>& spec, const OptSpec& option) {
     ParseStatus reserved = check_reserved_help_names(spec, option);
     if (!reserved) {
-        return std::unexpected(reserved.error());
+        return Unexpected(reserved.error());
     }
 
     ParseStatus value_tags = check_value_tags(spec, option);
     if (!value_tags) {
-        return std::unexpected(value_tags.error());
+        return Unexpected(value_tags.error());
     }
 
     return check_choice_default(spec, option);
@@ -223,7 +221,7 @@ constexpr ParseStatus check_options(const ParsedSpec<N, M>& spec) {
 
         ParseStatus status = check_option(spec, left);
         if (!status) {
-            return std::unexpected(status.error());
+            return Unexpected(status.error());
         }
 
         for (size_t j = i + 1; j < spec.nopt; ++j) {
@@ -232,7 +230,7 @@ constexpr ParseStatus check_options(const ParsedSpec<N, M>& spec) {
             ParseStatus duplicate =
                 check_duplicate_option_names(spec, left, right);
             if (!duplicate) {
-                return std::unexpected(duplicate.error());
+                return Unexpected(duplicate.error());
             }
         }
     }
@@ -244,17 +242,17 @@ template <size_t N, size_t M>
 constexpr ParseStatus check_spec(const ParsedSpec<N, M>& spec) {
     ParseStatus variadic = check_variadic_is_last(spec);
     if (!variadic) {
-        return std::unexpected(variadic.error());
+        return Unexpected(variadic.error());
     }
 
     ParseStatus optional = check_optional_is_last(spec);
     if (!optional) {
-        return std::unexpected(optional.error());
+        return Unexpected(optional.error());
     }
 
     ParseStatus args = check_duplicate_arguments(spec);
     if (!args) {
-        return std::unexpected(args.error());
+        return Unexpected(args.error());
     }
 
     return check_options(spec);

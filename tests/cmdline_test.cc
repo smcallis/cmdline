@@ -3,7 +3,6 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
-#include <expected>
 #include <optional>
 #include <span>
 #include <string>
@@ -57,8 +56,7 @@ struct FirstWidgetType {
     static constexpr std::string_view name = "widget";
 
     // Prefixes parsed text with the first widget type marker.
-    static std::expected<type, TypeConversionError> parse(
-        std::string_view text) {
+    static Expected<type, TypeConversionError> parse(std::string_view text) {
         return "first-widget:" + std::string(text);
     }
 };
@@ -70,8 +68,7 @@ struct LastWidgetType {
     static constexpr std::string_view name = "widget";
 
     // Prefixes parsed text with the last widget type marker.
-    static std::expected<type, TypeConversionError> parse(
-        std::string_view text) {
+    static Expected<type, TypeConversionError> parse(std::string_view text) {
         return "last-widget:" + std::string(text);
     }
 };
@@ -83,8 +80,7 @@ struct OverrideStringType {
     static constexpr std::string_view name = "string";
 
     // Prefixes parsed text to prove the built-in string type was not selected.
-    static std::expected<type, TypeConversionError> parse(
-        std::string_view text) {
+    static Expected<type, TypeConversionError> parse(std::string_view text) {
         return "custom-string:" + std::string(text);
     }
 };
@@ -96,16 +92,16 @@ struct PortType {
     static constexpr std::string_view name = "port";
 
     // Parses a decimal port number.
-    static constexpr std::expected<type, TypeConversionError> parse(
+    static constexpr Expected<type, TypeConversionError> parse(
         std::string_view text) {
         if (text.empty()) {
-            return std::unexpected(TypeConversionError("empty port"));
+            return Unexpected(TypeConversionError("empty port"));
         }
 
         type value = 0;
         for (char ch : text) {
             if (ch < '0' || ch > '9') {
-                return std::unexpected(TypeConversionError("invalid port"));
+                return Unexpected(TypeConversionError("invalid port"));
             }
             value = value * 10 + (ch - '0');
         }
@@ -120,8 +116,7 @@ struct RuntimePortType {
     static constexpr std::string_view name = "runtime-port";
 
     // Parses a decimal port number.
-    static std::expected<type, TypeConversionError> parse(
-        std::string_view text) {
+    static Expected<type, TypeConversionError> parse(std::string_view text) {
         return PortType::parse(text);
     }
 };
@@ -133,10 +128,10 @@ struct CommaType {
     static constexpr std::string_view name = "comma";
 
     // Parses exactly "a,b" to prove scalar defaults are not comma-split.
-    static constexpr std::expected<type, TypeConversionError> parse(
+    static constexpr Expected<type, TypeConversionError> parse(
         std::string_view text) {
         if (text != "a,b") {
-            return std::unexpected(TypeConversionError("invalid comma value"));
+            return Unexpected(TypeConversionError("invalid comma value"));
         }
         return 1;
     }
@@ -149,10 +144,10 @@ struct QuoteDefaultType {
     static constexpr std::string_view name = "quote-default";
 
     // Parses one value that includes an embedded quote.
-    static constexpr std::expected<type, TypeConversionError> parse(
+    static constexpr Expected<type, TypeConversionError> parse(
         std::string_view text) {
         if (text != R"(say "hello")") {
-            return std::unexpected(TypeConversionError("invalid quote value"));
+            return Unexpected(TypeConversionError("invalid quote value"));
         }
         return true;
     }

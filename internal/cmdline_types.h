@@ -5,7 +5,6 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -38,7 +37,7 @@ using DefaultType = StringType;
 //
 template <typename T>
 concept SpecType = [] {
-    using Error = std::expected<typename T::type, TypeConversionError>;
+    using Error = Expected<typename T::type, TypeConversionError>;
 
     return requires(std::string_view text) {
         typename T::type;
@@ -119,7 +118,7 @@ struct StringType {
 
     static constexpr std::string_view name = kDefaultTypeName;
 
-    static constexpr std::expected<type, TypeConversionError> parse(
+    static constexpr Expected<type, TypeConversionError> parse(
         std::string_view text) {
         return std::string(text);
     }
@@ -132,14 +131,14 @@ struct IntType {
     static constexpr std::string_view name = "int";
 
     // Parses a signed integer from a whole string.
-    static constexpr std::expected<type, TypeConversionError> parse(
+    static constexpr Expected<type, TypeConversionError> parse(
         std::string_view text) {
         type value{};
         auto result =
             std::from_chars(text.data(), text.data() + text.size(), value);
         if (result.ec != std::errc{} ||
             result.ptr != text.data() + text.size()) {
-            return std::unexpected(TypeConversionError("invalid int"));
+            return Unexpected(TypeConversionError("invalid int"));
         }
         return value;
     }
@@ -152,14 +151,14 @@ struct UintType {
     static constexpr std::string_view name = "uint";
 
     // Parses an unsigned integer from a whole string.
-    static constexpr std::expected<type, TypeConversionError> parse(
+    static constexpr Expected<type, TypeConversionError> parse(
         std::string_view text) {
         type value{};
         auto result =
             std::from_chars(text.data(), text.data() + text.size(), value);
         if (result.ec != std::errc{} ||
             result.ptr != text.data() + text.size()) {
-            return std::unexpected(TypeConversionError("invalid uint"));
+            return Unexpected(TypeConversionError("invalid uint"));
         }
         return value;
     }
@@ -172,14 +171,13 @@ struct FloatType {
     static constexpr std::string_view name = "float";
 
     // Parses a float from a whole string.
-    static std::expected<type, TypeConversionError> parse(
-        std::string_view text) {
+    static Expected<type, TypeConversionError> parse(std::string_view text) {
         type value{};
         auto result =
             std::from_chars(text.data(), text.data() + text.size(), value);
         if (result.ec != std::errc{} ||
             result.ptr != text.data() + text.size()) {
-            return std::unexpected(TypeConversionError("invalid float"));
+            return Unexpected(TypeConversionError("invalid float"));
         }
         return value;
     }
@@ -192,14 +190,13 @@ struct DoubleType {
     static constexpr std::string_view name = "double";
 
     // Parses a double from a whole string.
-    static std::expected<type, TypeConversionError> parse(
-        std::string_view text) {
+    static Expected<type, TypeConversionError> parse(std::string_view text) {
         type value{};
         auto result =
             std::from_chars(text.data(), text.data() + text.size(), value);
         if (result.ec != std::errc{} ||
             result.ptr != text.data() + text.size()) {
-            return std::unexpected(TypeConversionError("invalid double"));
+            return Unexpected(TypeConversionError("invalid double"));
         }
         return value;
     }
