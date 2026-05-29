@@ -1,10 +1,10 @@
 # cmdline
 
-`cmdline` is a C++23/26 command-line parser where the usage text is the source
-of truth. You write a small help-like specification, `cmdline` checks it at
-compile time, then uses it at runtime to parse `argv`, print usage, and report
-errors. Because the spec is parsed at compile time, the runtime result has real
-typed accessors for command-line values instead of a bag of strings.
+`cmdline` is a C++20/23/26 command-line parser where the usage text is the
+source of truth. You write a small help-like specification, `cmdline` checks it
+at compile time, then uses it at runtime to parse `argv`, print usage, and
+report errors. Because the spec is parsed at compile time, the runtime result
+has real typed accessors for command-line values instead of a bag of strings.
 
 The simplest use case is intentionally direct: include `cmdline.h`, write a
 spec, parse `argc` and `argv`, then read arguments and options by name. The
@@ -79,7 +79,7 @@ The same diagnostic format points at a bad option value:
 
 ![Generated help output](img/help-output.png)
 
-Malformed specs fail when you compile. In C++23 the compiler can report the
+Malformed specs fail when you compile. In C++20/23 the compiler can report the
 line, column, and error category through the instantiated diagnostic type. In
 C++26, `static_assert` can use a generated message, so you get source context
 with a caret:
@@ -106,7 +106,7 @@ target_link_libraries(my_tool PRIVATE cmdline)
 
 `cmdline` expects `{fmt}` to be available as a CMake package. On Debian and
 Ubuntu, install `libfmt-dev`. Tests also need `libgtest-dev`. If you integrate
-the header manually, compile as C++23 or C++26 and link `{fmt}`. If your
+the header manually, compile as C++20/23 or C++26 and link `{fmt}`. If your
 standard library does not provide `<expected>`, put TartanLlama `expected.hpp`
 next to `cmdline.h`.
 
